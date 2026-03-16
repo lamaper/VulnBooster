@@ -1,0 +1,55 @@
+static void vnc_display_close(DisplayState *ds)
+
+{
+
+    VncDisplay *vs = ds ? (VncDisplay *)ds->opaque : vnc_display;
+
+
+
+    if (!vs)
+
+        return;
+
+    if (vs->display) {
+
+        g_free(vs->display);
+
+        vs->display = NULL;
+
+    }
+
+    if (vs->lsock != -1) {
+
+        qemu_set_fd_handler2(vs->lsock, NULL, NULL, NULL, NULL);
+
+        close(vs->lsock);
+
+        vs->lsock = -1;
+
+    }
+
+
+    g_free(vs->ws_display);
+
+    vs->ws_display = NULL;
+
+    if (vs->lwebsock != -1) {
+
+        qemu_set_fd_handler2(vs->lwebsock, NULL, NULL, NULL, NULL);
+
+        close(vs->lwebsock);
+
+        vs->lwebsock = -1;
+
+    }
+
+
+    vs->auth = VNC_AUTH_INVALID;
+
+
+    vs->subauth = VNC_AUTH_INVALID;
+
+    vs->tls.x509verify = 0;
+
+
+}

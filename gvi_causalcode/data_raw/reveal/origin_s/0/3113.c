@@ -1,0 +1,12 @@
+bool get_typbyval ( Oid typid ) {
+ HeapTuple tp ;
+ tp = SearchSysCache1 ( TYPEOID , ObjectIdGetDatum ( typid ) ) ;
+ if ( HeapTupleIsValid ( tp ) ) {
+ Form_pg_type typtup = ( Form_pg_type ) GETSTRUCT ( tp ) ;
+ bool result ;
+ result = typtup -> typbyval ;
+ ReleaseSysCache ( tp ) ;
+ return result ;
+ }
+ else return false ;
+ }

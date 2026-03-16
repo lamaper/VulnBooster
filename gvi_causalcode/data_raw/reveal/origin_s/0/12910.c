@@ -1,0 +1,27 @@
+TEST_F ( SSLErrorAssistantTest , DynamicInterstitialListComplexRegexMatch ) {
+ ASSERT_TRUE ( embedded_test_server ( ) -> Start ( ) ) ;
+ EXPECT_EQ ( 1u , ssl_info ( ) . public_key_hashes . size ( ) ) ;
+ auto config_proto = std : : make_unique < chrome_browser_ssl : : SSLErrorAssistantConfig > ( ) ;
+ config_proto -> set_version_id ( kLargeVersionId ) ;
+ chrome_browser_ssl : : DynamicInterstitial * filter = config_proto -> add_dynamic_interstitial ( ) ;
+ filter -> set_interstitial_type ( chrome_browser_ssl : : DynamicInterstitial : : INTERSTITIAL_PAGE_CAPTIVE_PORTAL ) ;
+ filter -> set_cert_error ( chrome_browser_ssl : : DynamicInterstitial : : UNKNOWN_CERT_ERROR ) ;
+ filter -> add_sha256_hash ( "sha256ightjar" ) ;
+ filter -> add_sha256_hash ( "sha256/frogmouth" ) ;
+ filter -> add_sha256_hash ( "sha256/poorwill" ) ;
+ filter -> set_mitm_software_name ( "UwS" ) ;
+ filter -> set_issuer_common_name_regex ( "whippoorwill" ) ;
+ filter = config_proto -> add_dynamic_interstitial ( ) ;
+ filter -> set_interstitial_type ( chrome_browser_ssl : : DynamicInterstitial : : INTERSTITIAL_PAGE_SSL ) ;
+ filter -> set_cert_error ( chrome_browser_ssl : : DynamicInterstitial : : ERR_CERT_COMMON_NAME_INVALID ) ;
+ filter -> add_sha256_hash ( "sha256uthatch" ) ;
+ filter -> add_sha256_hash ( ssl_info ( ) . public_key_hashes [ 0 ] . ToString ( ) ) ;
+ filter -> add_sha256_hash ( "sha256/treecreeper" ) ;
+ filter -> set_mitm_software_name ( "UwS" ) ;
+ filter -> set_issuer_common_name_regex ( "[0-9]+.0.[0-9]+.1" ) ;
+ filter -> set_issuer_organization_regex ( "T[a-z]+t CA" ) ;
+ error_assistant ( ) -> SetErrorAssistantProto ( std : : move ( config_proto ) ) ;
+ base : : Optional < DynamicInterstitialInfo > dynamic_interstitial = error_assistant ( ) -> MatchDynamicInterstitial ( ssl_info ( ) ) ;
+ ASSERT_TRUE ( dynamic_interstitial ) ;
+ EXPECT_EQ ( chrome_browser_ssl : : DynamicInterstitial : : INTERSTITIAL_PAGE_SSL , dynamic_interstitial -> interstitial_type ) ;
+ }

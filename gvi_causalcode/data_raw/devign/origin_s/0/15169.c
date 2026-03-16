@@ -1,0 +1,38 @@
+static ssize_t proxy_pwritev(FsContext *ctx, V9fsFidOpenState *fs,
+
+                             const struct iovec *iov,
+
+                             int iovcnt, off_t offset)
+
+{
+
+    ssize_t ret;
+
+
+    ret = pwritev(fs->fd, iov, iovcnt, offset);
+
+
+    ret = lseek(fs->fd, offset, SEEK_SET);
+
+    if (ret >= 0) {
+
+        ret = writev(fs->fd, iov, iovcnt);
+
+    }
+
+
+
+    if (ret > 0 && ctx->export_flags & V9FS_IMMEDIATE_WRITEOUT) {
+
+         
+
+        sync_file_range(fs->fd, offset, ret,
+
+                        SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE);
+
+    }
+
+
+    return ret;
+
+}

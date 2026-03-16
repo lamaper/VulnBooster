@@ -1,0 +1,39 @@
+void uninit_opts(void)
+
+{
+
+    int i;
+
+    for (i = 0; i < AVMEDIA_TYPE_NB; i++)
+
+        av_freep(&avcodec_opts[i]);
+
+    av_freep(&avformat_opts->key);
+
+    av_freep(&avformat_opts);
+
+
+    av_freep(&sws_opts);
+
+
+    for (i = 0; i < opt_name_count; i++) {
+
+         
+
+         
+
+        if (opt_values[i]) {
+
+            av_freep(&opt_names[i]);
+
+            av_freep(&opt_values[i]);
+
+        }
+
+    }
+
+    av_freep(&opt_names);
+
+    av_freep(&opt_values);
+
+}

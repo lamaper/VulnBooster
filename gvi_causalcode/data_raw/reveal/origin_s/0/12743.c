@@ -1,0 +1,31 @@
+guint16 de_ms_cm_2 ( tvbuff_t * tvb , proto_tree * tree , packet_info * pinfo , guint32 offset , guint len , gchar * add_string _U_ , int string_len _U_ ) {
+ guint32 curr_offset ;
+ curr_offset = offset ;
+ proto_tree_add_item ( tree , hf_gsm_a_b8spare , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_MSC_rev , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_ES_IND , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_A5_1_algorithm_sup , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_RF_power_capability , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ curr_offset ++ ;
+ NO_MORE_DATA_CHECK ( len ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_b8spare , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_ps_sup_cap , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_SS_screening_indicator , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_SM_capability , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_VBS_notification_rec , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_VGCS_notification_rec , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_FC_frequency_cap , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ curr_offset ++ ;
+ NO_MORE_DATA_CHECK ( len ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_CM3 , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_b7spare , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_LCS_VA_cap , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_UCS2_treatment , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_SoLSA , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_CMSP , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_A5_3_algorithm_sup , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( tree , hf_gsm_a_A5_2_algorithm_sup , tvb , curr_offset , 1 , ENC_BIG_ENDIAN ) ;
+ curr_offset ++ ;
+ EXTRANEOUS_DATA_CHECK ( len , curr_offset - offset , pinfo , & ei_gsm_a_extraneous_data ) ;
+ return ( curr_offset - offset ) ;
+ }

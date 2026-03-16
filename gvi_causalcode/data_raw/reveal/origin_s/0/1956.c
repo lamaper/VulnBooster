@@ -1,0 +1,35 @@
+static int remoteSerializeError ( struct qemud_client * client , remote_error * rerr , int program , int version , int procedure , int type , int serial ) {
+ XDR xdr ;
+ unsigned int len ;
+ struct qemud_client_message * msg = NULL ;
+ VIR_DEBUG ( "prog=%d ver=%d proc=%d type=%d serial=%d, msg=%s" , program , version , procedure , type , serial , rerr -> message ? * rerr -> message : "(none)" ) ;
+ if ( VIR_ALLOC ( msg ) < 0 ) goto fatal_error ;
+ msg -> hdr . prog = program ;
+ msg -> hdr . vers = version ;
+ msg -> hdr . proc = procedure ;
+ msg -> hdr . type = type ;
+ msg -> hdr . serial = serial ;
+ msg -> hdr . status = REMOTE_ERROR ;
+ msg -> bufferLength = sizeof ( msg -> buffer ) ;
+ xdrmem_create ( & xdr , msg -> buffer , msg -> bufferLength , XDR_ENCODE ) ;
+ len = 0 ;
+ if ( ! xdr_u_int ( & xdr , & len ) ) goto xdr_error ;
+ if ( ! xdr_remote_message_header ( & xdr , & msg -> hdr ) ) goto xdr_error ;
+ if ( rerr -> code == 0 ) remoteDispatchGenericError ( rerr ) ;
+ if ( ! xdr_remote_error ( & xdr , rerr ) ) goto xdr_error ;
+ len = xdr_getpos ( & xdr ) ;
+ if ( xdr_setpos ( & xdr , 0 ) == 0 ) goto xdr_error ;
+ if ( ! xdr_u_int ( & xdr , & len ) ) goto xdr_error ;
+ xdr_destroy ( & xdr ) ;
+ msg -> bufferLength = len ;
+ msg -> bufferOffset = 0 ;
+ qemudClientMessageQueuePush ( & client -> tx , msg ) ;
+ qemudUpdateClientEvent ( client ) ;
+ xdr_free ( ( xdrproc_t ) xdr_remote_error , ( char * ) rerr ) ;
+ return 0 ;
+ xdr_error : VIR_WARN ( "Failed to serialize remote error '%s' as XDR" , rerr -> message ? * rerr -> message : "<unknown>" ) ;
+ xdr_destroy ( & xdr ) ;
+ VIR_FREE ( msg ) ;
+ fatal_error : xdr_free ( ( xdrproc_t ) xdr_remote_error , ( char * ) rerr ) ;
+ return - 1 ;
+ }

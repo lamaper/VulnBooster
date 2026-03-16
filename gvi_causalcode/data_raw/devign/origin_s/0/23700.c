@@ -1,0 +1,45 @@
+static int vnc_tls_initialize(void)
+
+{
+
+    static int tlsinitialized = 0;
+
+
+
+    if (tlsinitialized)
+
+	return 1;
+
+
+
+    if (gnutls_global_init () < 0)
+
+	return 0;
+
+
+
+     
+
+    if (gnutls_dh_params_init (&dh_params) < 0)
+
+	return 0;
+
+    if (gnutls_dh_params_generate2 (dh_params, DH_BITS) < 0)
+
+	return 0;
+
+
+    gnutls_global_set_log_level(10);
+
+    gnutls_global_set_log_function(vnc_debug_gnutls_log);
+
+
+
+
+    tlsinitialized = 1;
+
+
+
+    return 1;
+
+}

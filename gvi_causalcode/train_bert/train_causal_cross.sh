@@ -1,0 +1,12 @@
+python run.py \
+  --do_train \
+  --do_test \
+  --train_task reveal \
+  --test_task devign \
+  --model_name linevul \
+  --enhance_method CausalCode \
+  --attack_type token \
+  --domain_list origin_s,linevul-CausalCode-token \
+  --epochs 15 \
+  --batch_size 8 \
+  --gpu 0

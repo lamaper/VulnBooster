@@ -1,0 +1,2 @@
+void rfbDecrClientRef ( rfbClientPtr cl ) {
+ }

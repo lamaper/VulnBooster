@@ -1,0 +1,33 @@
+TEST_F ( ImmersiveModeControllerAshTestHostedApp , Layout ) {
+ AddTab ( browser ( ) , GURL ( "about:blank" ) ) ;
+ TabStrip * tabstrip = browser_view ( ) -> tabstrip ( ) ;
+ ToolbarView * toolbar = browser_view ( ) -> toolbar ( ) ;
+ views : : WebView * contents_web_view = browser_view ( ) -> GetContentsWebViewForTest ( ) ;
+ views : : View * top_container = browser_view ( ) -> top_container ( ) ;
+ ASSERT_FALSE ( browser_view ( ) -> GetWidget ( ) -> IsFullscreen ( ) ) ;
+ ASSERT_FALSE ( controller ( ) -> IsEnabled ( ) ) ;
+ EXPECT_FALSE ( tabstrip -> visible ( ) ) ;
+ EXPECT_FALSE ( toolbar -> visible ( ) ) ;
+ int header_height = GetBoundsInWidget ( contents_web_view ) . y ( ) ;
+ ToggleFullscreen ( ) ;
+ EXPECT_TRUE ( browser_view ( ) -> GetWidget ( ) -> IsFullscreen ( ) ) ;
+ EXPECT_TRUE ( controller ( ) -> IsEnabled ( ) ) ;
+ EXPECT_FALSE ( controller ( ) -> IsRevealed ( ) ) ;
+ EXPECT_FALSE ( tabstrip -> visible ( ) ) ;
+ EXPECT_FALSE ( toolbar -> visible ( ) ) ;
+ EXPECT_TRUE ( top_container -> GetVisibleBounds ( ) . IsEmpty ( ) ) ;
+ EXPECT_EQ ( 0 , GetBoundsInWidget ( contents_web_view ) . y ( ) ) ;
+ AttemptReveal ( ) ;
+ EXPECT_FALSE ( tabstrip -> visible ( ) ) ;
+ EXPECT_FALSE ( toolbar -> visible ( ) ) ;
+ EXPECT_EQ ( 0 , GetBoundsInWidget ( contents_web_view ) . y ( ) ) ;
+ gfx : : Rect top_container_bounds_in_widget ( GetBoundsInWidget ( top_container ) ) ;
+ EXPECT_EQ ( 0 , top_container_bounds_in_widget . y ( ) ) ;
+ EXPECT_EQ ( header_height , top_container_bounds_in_widget . height ( ) ) ;
+ ToggleFullscreen ( ) ;
+ EXPECT_FALSE ( browser_view ( ) -> GetWidget ( ) -> IsFullscreen ( ) ) ;
+ EXPECT_FALSE ( controller ( ) -> IsEnabled ( ) ) ;
+ EXPECT_FALSE ( tabstrip -> visible ( ) ) ;
+ EXPECT_FALSE ( toolbar -> visible ( ) ) ;
+ EXPECT_EQ ( header_height , GetBoundsInWidget ( contents_web_view ) . y ( ) ) ;
+ }

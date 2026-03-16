@@ -1,0 +1,33 @@
+void ts_lua_inject_http_config_api ( lua_State * L ) {
+ ts_lua_inject_http_config_variables ( L ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_int_set ) ;
+ lua_setfield ( L , - 2 , "config_int_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_int_get ) ;
+ lua_setfield ( L , - 2 , "config_int_get" ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_float_set ) ;
+ lua_setfield ( L , - 2 , "config_float_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_float_get ) ;
+ lua_setfield ( L , - 2 , "config_float_get" ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_string_set ) ;
+ lua_setfield ( L , - 2 , "config_string_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_config_string_get ) ;
+ lua_setfield ( L , - 2 , "config_string_get" ) ;
+ lua_pushcfunction ( L , ts_lua_http_timeout_set ) ;
+ lua_setfield ( L , - 2 , "timeout_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_client_packet_mark_set ) ;
+ lua_setfield ( L , - 2 , "client_packet_mark_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_server_packet_mark_set ) ;
+ lua_setfield ( L , - 2 , "server_packet_mark_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_client_packet_tos_set ) ;
+ lua_setfield ( L , - 2 , "client_packet_tos_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_server_packet_tos_set ) ;
+ lua_setfield ( L , - 2 , "server_packet_tos_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_client_packet_dscp_set ) ;
+ lua_setfield ( L , - 2 , "client_packet_dscp_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_server_packet_dscp_set ) ;
+ lua_setfield ( L , - 2 , "server_packet_dscp_set" ) ;
+ lua_pushcfunction ( L , ts_lua_http_enable_redirect ) ;
+ lua_setfield ( L , - 2 , "enable_redirect" ) ;
+ lua_pushcfunction ( L , ts_lua_http_set_debug ) ;
+ lua_setfield ( L , - 2 , "set_debug" ) ;
+ }

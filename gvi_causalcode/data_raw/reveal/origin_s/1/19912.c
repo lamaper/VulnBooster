@@ -1,0 +1,151 @@
+void vp9_fdct16x16_c ( const int16_t * input , int16_t * output , int stride ) {
+ int pass ;
+ int16_t intermediate [ 256 ] ;
+ const int16_t * in = input ;
+ int16_t * out = intermediate ;
+ for ( pass = 0 ;
+ pass < 2 ;
+ ++ pass ) {
+ int step1 [ 8 ] ;
+ int step2 [ 8 ] ;
+ int step3 [ 8 ] ;
+ int input [ 8 ] ;
+ int temp1 , temp2 ;
+ int i ;
+ for ( i = 0 ;
+ i < 16 ;
+ i ++ ) {
+ if ( 0 == pass ) {
+ input [ 0 ] = ( in [ 0 * stride ] + in [ 15 * stride ] ) * 4 ;
+ input [ 1 ] = ( in [ 1 * stride ] + in [ 14 * stride ] ) * 4 ;
+ input [ 2 ] = ( in [ 2 * stride ] + in [ 13 * stride ] ) * 4 ;
+ input [ 3 ] = ( in [ 3 * stride ] + in [ 12 * stride ] ) * 4 ;
+ input [ 4 ] = ( in [ 4 * stride ] + in [ 11 * stride ] ) * 4 ;
+ input [ 5 ] = ( in [ 5 * stride ] + in [ 10 * stride ] ) * 4 ;
+ input [ 6 ] = ( in [ 6 * stride ] + in [ 9 * stride ] ) * 4 ;
+ input [ 7 ] = ( in [ 7 * stride ] + in [ 8 * stride ] ) * 4 ;
+ step1 [ 0 ] = ( in [ 7 * stride ] - in [ 8 * stride ] ) * 4 ;
+ step1 [ 1 ] = ( in [ 6 * stride ] - in [ 9 * stride ] ) * 4 ;
+ step1 [ 2 ] = ( in [ 5 * stride ] - in [ 10 * stride ] ) * 4 ;
+ step1 [ 3 ] = ( in [ 4 * stride ] - in [ 11 * stride ] ) * 4 ;
+ step1 [ 4 ] = ( in [ 3 * stride ] - in [ 12 * stride ] ) * 4 ;
+ step1 [ 5 ] = ( in [ 2 * stride ] - in [ 13 * stride ] ) * 4 ;
+ step1 [ 6 ] = ( in [ 1 * stride ] - in [ 14 * stride ] ) * 4 ;
+ step1 [ 7 ] = ( in [ 0 * stride ] - in [ 15 * stride ] ) * 4 ;
+ }
+ else {
+ input [ 0 ] = ( ( in [ 0 * 16 ] + 1 ) >> 2 ) + ( ( in [ 15 * 16 ] + 1 ) >> 2 ) ;
+ input [ 1 ] = ( ( in [ 1 * 16 ] + 1 ) >> 2 ) + ( ( in [ 14 * 16 ] + 1 ) >> 2 ) ;
+ input [ 2 ] = ( ( in [ 2 * 16 ] + 1 ) >> 2 ) + ( ( in [ 13 * 16 ] + 1 ) >> 2 ) ;
+ input [ 3 ] = ( ( in [ 3 * 16 ] + 1 ) >> 2 ) + ( ( in [ 12 * 16 ] + 1 ) >> 2 ) ;
+ input [ 4 ] = ( ( in [ 4 * 16 ] + 1 ) >> 2 ) + ( ( in [ 11 * 16 ] + 1 ) >> 2 ) ;
+ input [ 5 ] = ( ( in [ 5 * 16 ] + 1 ) >> 2 ) + ( ( in [ 10 * 16 ] + 1 ) >> 2 ) ;
+ input [ 6 ] = ( ( in [ 6 * 16 ] + 1 ) >> 2 ) + ( ( in [ 9 * 16 ] + 1 ) >> 2 ) ;
+ input [ 7 ] = ( ( in [ 7 * 16 ] + 1 ) >> 2 ) + ( ( in [ 8 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 0 ] = ( ( in [ 7 * 16 ] + 1 ) >> 2 ) - ( ( in [ 8 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 1 ] = ( ( in [ 6 * 16 ] + 1 ) >> 2 ) - ( ( in [ 9 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 2 ] = ( ( in [ 5 * 16 ] + 1 ) >> 2 ) - ( ( in [ 10 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 3 ] = ( ( in [ 4 * 16 ] + 1 ) >> 2 ) - ( ( in [ 11 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 4 ] = ( ( in [ 3 * 16 ] + 1 ) >> 2 ) - ( ( in [ 12 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 5 ] = ( ( in [ 2 * 16 ] + 1 ) >> 2 ) - ( ( in [ 13 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 6 ] = ( ( in [ 1 * 16 ] + 1 ) >> 2 ) - ( ( in [ 14 * 16 ] + 1 ) >> 2 ) ;
+ step1 [ 7 ] = ( ( in [ 0 * 16 ] + 1 ) >> 2 ) - ( ( in [ 15 * 16 ] + 1 ) >> 2 ) ;
+ }
+ {
+ int s0 , s1 , s2 , s3 , s4 , s5 , s6 , s7 ;
+ int t0 , t1 , t2 , t3 ;
+ int x0 , x1 , x2 , x3 ;
+ s0 = input [ 0 ] + input [ 7 ] ;
+ s1 = input [ 1 ] + input [ 6 ] ;
+ s2 = input [ 2 ] + input [ 5 ] ;
+ s3 = input [ 3 ] + input [ 4 ] ;
+ s4 = input [ 3 ] - input [ 4 ] ;
+ s5 = input [ 2 ] - input [ 5 ] ;
+ s6 = input [ 1 ] - input [ 6 ] ;
+ s7 = input [ 0 ] - input [ 7 ] ;
+ x0 = s0 + s3 ;
+ x1 = s1 + s2 ;
+ x2 = s1 - s2 ;
+ x3 = s0 - s3 ;
+ t0 = ( x0 + x1 ) * cospi_16_64 ;
+ t1 = ( x0 - x1 ) * cospi_16_64 ;
+ t2 = x3 * cospi_8_64 + x2 * cospi_24_64 ;
+ t3 = x3 * cospi_24_64 - x2 * cospi_8_64 ;
+ out [ 0 ] = fdct_round_shift ( t0 ) ;
+ out [ 4 ] = fdct_round_shift ( t2 ) ;
+ out [ 8 ] = fdct_round_shift ( t1 ) ;
+ out [ 12 ] = fdct_round_shift ( t3 ) ;
+ t0 = ( s6 - s5 ) * cospi_16_64 ;
+ t1 = ( s6 + s5 ) * cospi_16_64 ;
+ t2 = fdct_round_shift ( t0 ) ;
+ t3 = fdct_round_shift ( t1 ) ;
+ x0 = s4 + t2 ;
+ x1 = s4 - t2 ;
+ x2 = s7 - t3 ;
+ x3 = s7 + t3 ;
+ t0 = x0 * cospi_28_64 + x3 * cospi_4_64 ;
+ t1 = x1 * cospi_12_64 + x2 * cospi_20_64 ;
+ t2 = x2 * cospi_12_64 + x1 * - cospi_20_64 ;
+ t3 = x3 * cospi_28_64 + x0 * - cospi_4_64 ;
+ out [ 2 ] = fdct_round_shift ( t0 ) ;
+ out [ 6 ] = fdct_round_shift ( t2 ) ;
+ out [ 10 ] = fdct_round_shift ( t1 ) ;
+ out [ 14 ] = fdct_round_shift ( t3 ) ;
+ }
+ {
+ temp1 = ( step1 [ 5 ] - step1 [ 2 ] ) * cospi_16_64 ;
+ temp2 = ( step1 [ 4 ] - step1 [ 3 ] ) * cospi_16_64 ;
+ step2 [ 2 ] = fdct_round_shift ( temp1 ) ;
+ step2 [ 3 ] = fdct_round_shift ( temp2 ) ;
+ temp1 = ( step1 [ 4 ] + step1 [ 3 ] ) * cospi_16_64 ;
+ temp2 = ( step1 [ 5 ] + step1 [ 2 ] ) * cospi_16_64 ;
+ step2 [ 4 ] = fdct_round_shift ( temp1 ) ;
+ step2 [ 5 ] = fdct_round_shift ( temp2 ) ;
+ step3 [ 0 ] = step1 [ 0 ] + step2 [ 3 ] ;
+ step3 [ 1 ] = step1 [ 1 ] + step2 [ 2 ] ;
+ step3 [ 2 ] = step1 [ 1 ] - step2 [ 2 ] ;
+ step3 [ 3 ] = step1 [ 0 ] - step2 [ 3 ] ;
+ step3 [ 4 ] = step1 [ 7 ] - step2 [ 4 ] ;
+ step3 [ 5 ] = step1 [ 6 ] - step2 [ 5 ] ;
+ step3 [ 6 ] = step1 [ 6 ] + step2 [ 5 ] ;
+ step3 [ 7 ] = step1 [ 7 ] + step2 [ 4 ] ;
+ temp1 = step3 [ 1 ] * - cospi_8_64 + step3 [ 6 ] * cospi_24_64 ;
+ temp2 = step3 [ 2 ] * cospi_24_64 + step3 [ 5 ] * cospi_8_64 ;
+ step2 [ 1 ] = fdct_round_shift ( temp1 ) ;
+ step2 [ 2 ] = fdct_round_shift ( temp2 ) ;
+ temp1 = step3 [ 2 ] * cospi_8_64 - step3 [ 5 ] * cospi_24_64 ;
+ temp2 = step3 [ 1 ] * cospi_24_64 + step3 [ 6 ] * cospi_8_64 ;
+ step2 [ 5 ] = fdct_round_shift ( temp1 ) ;
+ step2 [ 6 ] = fdct_round_shift ( temp2 ) ;
+ step1 [ 0 ] = step3 [ 0 ] + step2 [ 1 ] ;
+ step1 [ 1 ] = step3 [ 0 ] - step2 [ 1 ] ;
+ step1 [ 2 ] = step3 [ 3 ] + step2 [ 2 ] ;
+ step1 [ 3 ] = step3 [ 3 ] - step2 [ 2 ] ;
+ step1 [ 4 ] = step3 [ 4 ] - step2 [ 5 ] ;
+ step1 [ 5 ] = step3 [ 4 ] + step2 [ 5 ] ;
+ step1 [ 6 ] = step3 [ 7 ] - step2 [ 6 ] ;
+ step1 [ 7 ] = step3 [ 7 ] + step2 [ 6 ] ;
+ temp1 = step1 [ 0 ] * cospi_30_64 + step1 [ 7 ] * cospi_2_64 ;
+ temp2 = step1 [ 1 ] * cospi_14_64 + step1 [ 6 ] * cospi_18_64 ;
+ out [ 1 ] = fdct_round_shift ( temp1 ) ;
+ out [ 9 ] = fdct_round_shift ( temp2 ) ;
+ temp1 = step1 [ 2 ] * cospi_22_64 + step1 [ 5 ] * cospi_10_64 ;
+ temp2 = step1 [ 3 ] * cospi_6_64 + step1 [ 4 ] * cospi_26_64 ;
+ out [ 5 ] = fdct_round_shift ( temp1 ) ;
+ out [ 13 ] = fdct_round_shift ( temp2 ) ;
+ temp1 = step1 [ 3 ] * - cospi_26_64 + step1 [ 4 ] * cospi_6_64 ;
+ temp2 = step1 [ 2 ] * - cospi_10_64 + step1 [ 5 ] * cospi_22_64 ;
+ out [ 3 ] = fdct_round_shift ( temp1 ) ;
+ out [ 11 ] = fdct_round_shift ( temp2 ) ;
+ temp1 = step1 [ 1 ] * - cospi_18_64 + step1 [ 6 ] * cospi_14_64 ;
+ temp2 = step1 [ 0 ] * - cospi_2_64 + step1 [ 7 ] * cospi_30_64 ;
+ out [ 7 ] = fdct_round_shift ( temp1 ) ;
+ out [ 15 ] = fdct_round_shift ( temp2 ) ;
+ }
+ in ++ ;
+ out += 16 ;
+ }
+ in = intermediate ;
+ out = output ;
+ }
+ }

@@ -1,0 +1,32 @@
+TEST_F ( ProfileInfoCacheTest , DownloadHighResAvatarTest ) {
+ switches : : EnableNewAvatarMenuForTesting ( base : : CommandLine : : ForCurrentProcess ( ) ) ;
+ ProfileInfoCache profile_info_cache ( g_browser_process -> local_state ( ) , testing_profile_manager_ . profile_manager ( ) -> user_data_dir ( ) ) ;
+ const size_t kIconIndex = 0 ;
+ base : : FilePath icon_path = profiles : : GetPathOfHighResAvatarAtIndex ( kIconIndex ) ;
+ EXPECT_TRUE ( base : : PathExists ( icon_path ) ) ;
+ EXPECT_TRUE ( base : : DeleteFile ( icon_path , true ) ) ;
+ EXPECT_FALSE ( base : : PathExists ( icon_path ) ) ;
+ EXPECT_EQ ( 0U , profile_info_cache . GetNumberOfProfiles ( ) ) ;
+ base : : FilePath path_1 = GetProfilePath ( "path_1" ) ;
+ profile_info_cache . AddProfileToCache ( path_1 , ASCIIToUTF16 ( "name_1" ) , base : : string16 ( ) , kIconIndex , std : : string ( ) ) ;
+ EXPECT_EQ ( 1U , profile_info_cache . GetNumberOfProfiles ( ) ) ;
+ base : : RunLoop ( ) . RunUntilIdle ( ) ;
+ EXPECT_EQ ( 0U , profile_info_cache . cached_avatar_images_ . size ( ) ) ;
+ EXPECT_EQ ( 1U , profile_info_cache . avatar_images_downloads_in_progress_ . size ( ) ) ;
+ EXPECT_FALSE ( profile_info_cache . GetHighResAvatarOfProfileAtIndex ( 0 ) ) ;
+ ProfileAvatarDownloader avatar_downloader ( kIconIndex , profile_info_cache . GetPathOfProfileAtIndex ( 0 ) , & profile_info_cache ) ;
+ SkBitmap bitmap ;
+ bitmap . allocN32Pixels ( 2 , 2 ) ;
+ bitmap . eraseColor ( SK_ColorGREEN ) ;
+ avatar_downloader . OnFetchComplete ( GURL ( "http://www.google.com/avatar.png" ) , & bitmap ) ;
+ EXPECT_EQ ( 0U , profile_info_cache . avatar_images_downloads_in_progress_ . size ( ) ) ;
+ std : : string file_name = profiles : : GetDefaultAvatarIconFileNameAtIndex ( kIconIndex ) ;
+ EXPECT_EQ ( 1U , profile_info_cache . cached_avatar_images_ . size ( ) ) ;
+ EXPECT_TRUE ( profile_info_cache . GetHighResAvatarOfProfileAtIndex ( 0 ) ) ;
+ EXPECT_EQ ( profile_info_cache . cached_avatar_images_ [ file_name ] , profile_info_cache . GetHighResAvatarOfProfileAtIndex ( 0 ) ) ;
+ base : : RunLoop ( ) . RunUntilIdle ( ) ;
+ EXPECT_NE ( std : : string : : npos , icon_path . MaybeAsASCII ( ) . find ( file_name ) ) ;
+ EXPECT_TRUE ( base : : PathExists ( icon_path ) ) ;
+ EXPECT_TRUE ( base : : DeleteFile ( icon_path , true ) ) ;
+ EXPECT_FALSE ( base : : PathExists ( icon_path ) ) ;
+ }
