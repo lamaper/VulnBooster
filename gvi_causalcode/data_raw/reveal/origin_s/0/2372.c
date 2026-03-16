@@ -1,0 +1,38 @@
+TEST_F ( ProfileInfoCacheTest , GAIAPicture ) {
+ const int kDefaultAvatarIndex = 0 ;
+ const int kOtherAvatarIndex = 1 ;
+ const int kGaiaPictureSize = 256 ;
+ GetCache ( ) -> AddProfileToCache ( GetProfilePath ( "path_1" ) , ASCIIToUTF16 ( "name_1" ) , base : : string16 ( ) , kDefaultAvatarIndex , std : : string ( ) ) ;
+ GetCache ( ) -> AddProfileToCache ( GetProfilePath ( "path_2" ) , ASCIIToUTF16 ( "name_2" ) , base : : string16 ( ) , kDefaultAvatarIndex , std : : string ( ) ) ;
+ EXPECT_EQ ( NULL , GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 0 ) ) ;
+ EXPECT_EQ ( NULL , GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ EXPECT_FALSE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 0 ) ) ;
+ EXPECT_FALSE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ EXPECT_TRUE ( GetCache ( ) -> ProfileIsUsingDefaultAvatarAtIndex ( 0 ) ) ;
+ EXPECT_TRUE ( GetCache ( ) -> ProfileIsUsingDefaultAvatarAtIndex ( 1 ) ) ;
+ int default_avatar_id = profiles : : GetDefaultAvatarIconResourceIDAtIndex ( kDefaultAvatarIndex ) ;
+ const gfx : : Image & default_avatar_image ( ResourceBundle : : GetSharedInstance ( ) . GetImageNamed ( default_avatar_id ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( default_avatar_image , GetCache ( ) -> GetAvatarIconOfProfileAtIndex ( 1 ) ) ) ;
+ gfx : : Image gaia_image ( gfx : : test : : CreateImage ( kGaiaPictureSize , kGaiaPictureSize ) ) ;
+ GetCache ( ) -> SetGAIAPictureOfProfileAtIndex ( 1 , & gaia_image ) ;
+ EXPECT_EQ ( NULL , GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 0 ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( gaia_image , * GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 1 ) ) ) ;
+ EXPECT_TRUE ( GetCache ( ) -> ProfileIsUsingDefaultAvatarAtIndex ( 1 ) ) ;
+ EXPECT_TRUE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( gaia_image , GetCache ( ) -> GetAvatarIconOfProfileAtIndex ( 1 ) ) ) ;
+ GetCache ( ) -> SetAvatarIconOfProfileAtIndex ( 1 , kOtherAvatarIndex ) ;
+ GetCache ( ) -> SetProfileIsUsingDefaultAvatarAtIndex ( 1 , false ) ;
+ EXPECT_FALSE ( GetCache ( ) -> ProfileIsUsingDefaultAvatarAtIndex ( 1 ) ) ;
+ EXPECT_FALSE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ int other_avatar_id = profiles : : GetDefaultAvatarIconResourceIDAtIndex ( kOtherAvatarIndex ) ;
+ const gfx : : Image & other_avatar_image ( ResourceBundle : : GetSharedInstance ( ) . GetImageNamed ( other_avatar_id ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( other_avatar_image , GetCache ( ) -> GetAvatarIconOfProfileAtIndex ( 1 ) ) ) ;
+ GetCache ( ) -> SetIsUsingGAIAPictureOfProfileAtIndex ( 1 , true ) ;
+ EXPECT_TRUE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( gaia_image , * GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 1 ) ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( gaia_image , GetCache ( ) -> GetAvatarIconOfProfileAtIndex ( 1 ) ) ) ;
+ GetCache ( ) -> SetIsUsingGAIAPictureOfProfileAtIndex ( 1 , false ) ;
+ EXPECT_FALSE ( GetCache ( ) -> IsUsingGAIAPictureOfProfileAtIndex ( 1 ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( gaia_image , * GetCache ( ) -> GetGAIAPictureOfProfileAtIndex ( 1 ) ) ) ;
+ EXPECT_TRUE ( gfx : : test : : IsEqual ( other_avatar_image , GetCache ( ) -> GetAvatarIconOfProfileAtIndex ( 1 ) ) ) ;
+ }

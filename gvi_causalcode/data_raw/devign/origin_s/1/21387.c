@@ -1,0 +1,563 @@
+int cpu_ppc_handle_mmu_fault(CPUPPCState *env, target_ulong address, int rw,
+
+                             int mmu_idx)
+
+{
+
+    mmu_ctx_t ctx;
+
+    int access_type;
+
+    int ret = 0;
+
+
+
+    if (rw == 2) {
+
+         
+
+        rw = 0;
+
+        access_type = ACCESS_CODE;
+
+    } else {
+
+         
+
+        access_type = env->access_type;
+
+    }
+
+    ret = get_physical_address(env, &ctx, address, rw, access_type);
+
+    if (ret == 0) {
+
+        tlb_set_page(env, address & TARGET_PAGE_MASK,
+
+                     ctx.raddr & TARGET_PAGE_MASK, ctx.prot,
+
+                     mmu_idx, TARGET_PAGE_SIZE);
+
+        ret = 0;
+
+    } else if (ret < 0) {
+
+        LOG_MMU_STATE(env);
+
+        if (access_type == ACCESS_CODE) {
+
+            switch (ret) {
+
+            case -1:
+
+                 
+
+                switch (env->mmu_model) {
+
+                case POWERPC_MMU_SOFT_6xx:
+
+                    env->exception_index = POWERPC_EXCP_IFTLB;
+
+                    env->error_code = 1 << 18;
+
+                    env->spr[SPR_IMISS] = address;
+
+                    env->spr[SPR_ICMP] = 0x80000000 | ctx.ptem;
+
+                    goto tlb_miss;
+
+                case POWERPC_MMU_SOFT_74xx:
+
+                    env->exception_index = POWERPC_EXCP_IFTLB;
+
+                    goto tlb_miss_74xx;
+
+                case POWERPC_MMU_SOFT_4xx:
+
+                case POWERPC_MMU_SOFT_4xx_Z:
+
+                    env->exception_index = POWERPC_EXCP_ITLB;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_40x_DEAR] = address;
+
+                    env->spr[SPR_40x_ESR] = 0x00000000;
+
+                    break;
+
+                case POWERPC_MMU_32B:
+
+                case POWERPC_MMU_601:
+
+
+                case POWERPC_MMU_620:
+
+                case POWERPC_MMU_64B:
+
+                case POWERPC_MMU_2_06:
+
+
+                    env->exception_index = POWERPC_EXCP_ISI;
+
+                    env->error_code = 0x40000000;
+
+                    break;
+
+                case POWERPC_MMU_BOOKE206:
+
+                    booke206_update_mas_tlb_miss(env, address, rw);
+
+                     
+
+                case POWERPC_MMU_BOOKE:
+
+                    env->exception_index = POWERPC_EXCP_ITLB;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_BOOKE_DEAR] = address;
+
+                    return -1;
+
+                case POWERPC_MMU_MPC8xx:
+
+                     
+
+                    cpu_abort(env, "MPC8xx MMU model is not implemented\n");
+
+                    break;
+
+                case POWERPC_MMU_REAL:
+
+                    cpu_abort(env, "PowerPC in real mode should never raise "
+
+                              "any MMU exceptions\n");
+
+                    return -1;
+
+                default:
+
+                    cpu_abort(env, "Unknown or invalid MMU model\n");
+
+                    return -1;
+
+                }
+
+                break;
+
+            case -2:
+
+                 
+
+                env->exception_index = POWERPC_EXCP_ISI;
+
+                env->error_code = 0x08000000;
+
+                break;
+
+            case -3:
+
+                 
+
+                if ((env->mmu_model == POWERPC_MMU_BOOKE) ||
+
+                    (env->mmu_model == POWERPC_MMU_BOOKE206)) {
+
+                    env->spr[SPR_BOOKE_ESR] = 0x00000000;
+
+                }
+
+                env->exception_index = POWERPC_EXCP_ISI;
+
+                env->error_code = 0x10000000;
+
+                break;
+
+            case -4:
+
+                 
+
+                 
+
+                env->exception_index = POWERPC_EXCP_ISI;
+
+                env->error_code = 0x10000000;
+
+                break;
+
+
+            case -5:
+
+                 
+
+                if (env->mmu_model == POWERPC_MMU_620) {
+
+                    env->exception_index = POWERPC_EXCP_ISI;
+
+                     
+
+                    env->error_code = 0x40000000;
+
+                } else {
+
+                    env->exception_index = POWERPC_EXCP_ISEG;
+
+                    env->error_code = 0;
+
+                }
+
+                break;
+
+
+            }
+
+        } else {
+
+            switch (ret) {
+
+            case -1:
+
+                 
+
+                switch (env->mmu_model) {
+
+                case POWERPC_MMU_SOFT_6xx:
+
+                    if (rw == 1) {
+
+                        env->exception_index = POWERPC_EXCP_DSTLB;
+
+                        env->error_code = 1 << 16;
+
+                    } else {
+
+                        env->exception_index = POWERPC_EXCP_DLTLB;
+
+                        env->error_code = 0;
+
+                    }
+
+                    env->spr[SPR_DMISS] = address;
+
+                    env->spr[SPR_DCMP] = 0x80000000 | ctx.ptem;
+
+                tlb_miss:
+
+                    env->error_code |= ctx.key << 19;
+
+                    env->spr[SPR_HASH1] = env->htab_base +
+
+                        get_pteg_offset(env, ctx.hash[0], HASH_PTE_SIZE_32);
+
+                    env->spr[SPR_HASH2] = env->htab_base +
+
+                        get_pteg_offset(env, ctx.hash[1], HASH_PTE_SIZE_32);
+
+                    break;
+
+                case POWERPC_MMU_SOFT_74xx:
+
+                    if (rw == 1) {
+
+                        env->exception_index = POWERPC_EXCP_DSTLB;
+
+                    } else {
+
+                        env->exception_index = POWERPC_EXCP_DLTLB;
+
+                    }
+
+                tlb_miss_74xx:
+
+                     
+
+                    env->error_code = ctx.key << 19;
+
+                    env->spr[SPR_TLBMISS] = (address & ~((target_ulong)0x3)) |
+
+                        ((env->last_way + 1) & (env->nb_ways - 1));
+
+                    env->spr[SPR_PTEHI] = 0x80000000 | ctx.ptem;
+
+                    break;
+
+                case POWERPC_MMU_SOFT_4xx:
+
+                case POWERPC_MMU_SOFT_4xx_Z:
+
+                    env->exception_index = POWERPC_EXCP_DTLB;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_40x_DEAR] = address;
+
+                    if (rw) {
+
+                        env->spr[SPR_40x_ESR] = 0x00800000;
+
+                    } else {
+
+                        env->spr[SPR_40x_ESR] = 0x00000000;
+
+                    }
+
+                    break;
+
+                case POWERPC_MMU_32B:
+
+                case POWERPC_MMU_601:
+
+
+                case POWERPC_MMU_620:
+
+                case POWERPC_MMU_64B:
+
+                case POWERPC_MMU_2_06:
+
+
+                    env->exception_index = POWERPC_EXCP_DSI;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_DAR] = address;
+
+                    if (rw == 1) {
+
+                        env->spr[SPR_DSISR] = 0x42000000;
+
+                    } else {
+
+                        env->spr[SPR_DSISR] = 0x40000000;
+
+                    }
+
+                    break;
+
+                case POWERPC_MMU_MPC8xx:
+
+                     
+
+                    cpu_abort(env, "MPC8xx MMU model is not implemented\n");
+
+                    break;
+
+                case POWERPC_MMU_BOOKE206:
+
+                    booke206_update_mas_tlb_miss(env, address, rw);
+
+                     
+
+                case POWERPC_MMU_BOOKE:
+
+                    env->exception_index = POWERPC_EXCP_DTLB;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_BOOKE_DEAR] = address;
+
+                    env->spr[SPR_BOOKE_ESR] = rw ? ESR_ST : 0;
+
+                    return -1;
+
+                case POWERPC_MMU_REAL:
+
+                    cpu_abort(env, "PowerPC in real mode should never raise "
+
+                              "any MMU exceptions\n");
+
+                    return -1;
+
+                default:
+
+                    cpu_abort(env, "Unknown or invalid MMU model\n");
+
+                    return -1;
+
+                }
+
+                break;
+
+            case -2:
+
+                 
+
+                env->exception_index = POWERPC_EXCP_DSI;
+
+                env->error_code = 0;
+
+                if (env->mmu_model == POWERPC_MMU_SOFT_4xx
+
+                    || env->mmu_model == POWERPC_MMU_SOFT_4xx_Z) {
+
+                    env->spr[SPR_40x_DEAR] = address;
+
+                    if (rw) {
+
+                        env->spr[SPR_40x_ESR] |= 0x00800000;
+
+                    }
+
+                } else if ((env->mmu_model == POWERPC_MMU_BOOKE) ||
+
+                           (env->mmu_model == POWERPC_MMU_BOOKE206)) {
+
+                    env->spr[SPR_BOOKE_DEAR] = address;
+
+                    env->spr[SPR_BOOKE_ESR] = rw ? ESR_ST : 0;
+
+                } else {
+
+                    env->spr[SPR_DAR] = address;
+
+                    if (rw == 1) {
+
+                        env->spr[SPR_DSISR] = 0x0A000000;
+
+                    } else {
+
+                        env->spr[SPR_DSISR] = 0x08000000;
+
+                    }
+
+                }
+
+                break;
+
+            case -4:
+
+                 
+
+                switch (access_type) {
+
+                case ACCESS_FLOAT:
+
+                     
+
+                    env->exception_index = POWERPC_EXCP_ALIGN;
+
+                    env->error_code = POWERPC_EXCP_ALIGN_FP;
+
+                    env->spr[SPR_DAR] = address;
+
+                    break;
+
+                case ACCESS_RES:
+
+                     
+
+                    env->exception_index = POWERPC_EXCP_DSI;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_DAR] = address;
+
+                    if (rw == 1) {
+
+                        env->spr[SPR_DSISR] = 0x06000000;
+
+                    } else {
+
+                        env->spr[SPR_DSISR] = 0x04000000;
+
+                    }
+
+                    break;
+
+                case ACCESS_EXT:
+
+                     
+
+                    env->exception_index = POWERPC_EXCP_DSI;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_DAR] = address;
+
+                    if (rw == 1) {
+
+                        env->spr[SPR_DSISR] = 0x06100000;
+
+                    } else {
+
+                        env->spr[SPR_DSISR] = 0x04100000;
+
+                    }
+
+                    break;
+
+                default:
+
+                    printf("DSI: invalid exception (%d)\n", ret);
+
+                    env->exception_index = POWERPC_EXCP_PROGRAM;
+
+                    env->error_code =
+
+                        POWERPC_EXCP_INVAL | POWERPC_EXCP_INVAL_INVAL;
+
+                    env->spr[SPR_DAR] = address;
+
+                    break;
+
+                }
+
+                break;
+
+
+            case -5:
+
+                 
+
+                if (env->mmu_model == POWERPC_MMU_620) {
+
+                    env->exception_index = POWERPC_EXCP_DSI;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_DAR] = address;
+
+                     
+
+                    if (rw == 1) {
+
+                        env->spr[SPR_DSISR] = 0x42000000;
+
+                    } else {
+
+                        env->spr[SPR_DSISR] = 0x40000000;
+
+                    }
+
+                } else {
+
+                    env->exception_index = POWERPC_EXCP_DSEG;
+
+                    env->error_code = 0;
+
+                    env->spr[SPR_DAR] = address;
+
+                }
+
+                break;
+
+
+            }
+
+        }
+
+
+        printf("%s: set exception to %d %02x\n", __func__,
+
+               env->exception, env->error_code);
+
+
+        ret = 1;
+
+    }
+
+
+
+    return ret;
+
+}

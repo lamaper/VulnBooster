@@ -1,0 +1,35 @@
+TEST_F ( PrintPreviewUIUnitTest , PrintPreviewDraftPages ) {
+ WebContents * initiator = browser ( ) -> tab_strip_model ( ) -> GetActiveWebContents ( ) ;
+ ASSERT_TRUE ( initiator ) ;
+ printing : : PrintPreviewDialogController * controller = printing : : PrintPreviewDialogController : : GetInstance ( ) ;
+ ASSERT_TRUE ( controller ) ;
+ printing : : PrintViewManager * print_view_manager = printing : : PrintViewManager : : FromWebContents ( initiator ) ;
+ print_view_manager -> PrintPreviewNow ( initiator -> GetMainFrame ( ) , false ) ;
+ WebContents * preview_dialog = controller -> GetOrCreatePreviewDialog ( initiator ) ;
+ EXPECT_NE ( initiator , preview_dialog ) ;
+ EXPECT_EQ ( 1 , browser ( ) -> tab_strip_model ( ) -> count ( ) ) ;
+ EXPECT_TRUE ( IsShowingWebContentsModalDialog ( initiator ) ) ;
+ PrintPreviewUI * preview_ui = static_cast < PrintPreviewUI * > ( preview_dialog -> GetWebUI ( ) -> GetController ( ) ) ;
+ ASSERT_TRUE ( preview_ui != NULL ) ;
+ scoped_refptr < base : : RefCountedBytes > data ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX , & data ) ;
+ EXPECT_EQ ( NULL , data . get ( ) ) ;
+ scoped_refptr < base : : RefCountedBytes > dummy_data = CreateTestData ( ) ;
+ preview_ui -> SetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX , dummy_data . get ( ) ) ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX , & data ) ;
+ EXPECT_EQ ( dummy_data -> size ( ) , data -> size ( ) ) ;
+ EXPECT_EQ ( dummy_data . get ( ) , data . get ( ) ) ;
+ preview_ui -> SetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX + 2 , dummy_data . get ( ) ) ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX + 2 , & data ) ;
+ EXPECT_EQ ( dummy_data -> size ( ) , data -> size ( ) ) ;
+ EXPECT_EQ ( dummy_data . get ( ) , data . get ( ) ) ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX + 1 , & data ) ;
+ EXPECT_EQ ( NULL , data . get ( ) ) ;
+ preview_ui -> SetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX + 1 , dummy_data . get ( ) ) ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX + 1 , & data ) ;
+ EXPECT_EQ ( dummy_data -> size ( ) , data -> size ( ) ) ;
+ EXPECT_EQ ( dummy_data . get ( ) , data . get ( ) ) ;
+ preview_ui -> ClearAllPreviewData ( ) ;
+ preview_ui -> GetPrintPreviewDataForIndex ( printing : : FIRST_PAGE_INDEX , & data ) ;
+ EXPECT_EQ ( NULL , data . get ( ) ) ;
+ }

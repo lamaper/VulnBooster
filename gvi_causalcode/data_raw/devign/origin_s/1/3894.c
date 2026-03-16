@@ -1,0 +1,1329 @@
+static void disas_thumb_insn(CPUState *env, DisasContext *s)
+
+{
+
+    uint32_t val, insn, op, rm, rn, rd, shift, cond;
+
+    int32_t offset;
+
+    int i;
+
+    TCGv tmp;
+
+    TCGv tmp2;
+
+    TCGv addr;
+
+
+
+    if (s->condexec_mask) {
+
+        cond = s->condexec_cond;
+
+        if (cond != 0x0e) {      
+
+          s->condlabel = gen_new_label();
+
+          gen_test_cc(cond ^ 1, s->condlabel);
+
+          s->condjmp = 1;
+
+        }
+
+    }
+
+
+
+    insn = lduw_code(s->pc);
+
+    s->pc += 2;
+
+
+
+    switch (insn >> 12) {
+
+    case 0: case 1:
+
+
+
+        rd = insn & 7;
+
+        op = (insn >> 11) & 3;
+
+        if (op == 3) {
+
+             
+
+            rn = (insn >> 3) & 7;
+
+            tmp = load_reg(s, rn);
+
+            if (insn & (1 << 10)) {
+
+                 
+
+                tmp2 = new_tmp();
+
+                tcg_gen_movi_i32(tmp2, (insn >> 6) & 7);
+
+            } else {
+
+                 
+
+                rm = (insn >> 6) & 7;
+
+                tmp2 = load_reg(s, rm);
+
+            }
+
+            if (insn & (1 << 9)) {
+
+                if (s->condexec_mask)
+
+                    tcg_gen_sub_i32(tmp, tmp, tmp2);
+
+                else
+
+                    gen_helper_sub_cc(tmp, tmp, tmp2);
+
+            } else {
+
+                if (s->condexec_mask)
+
+                    tcg_gen_add_i32(tmp, tmp, tmp2);
+
+                else
+
+                    gen_helper_add_cc(tmp, tmp, tmp2);
+
+            }
+
+            dead_tmp(tmp2);
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+             
+
+            rm = (insn >> 3) & 7;
+
+            shift = (insn >> 6) & 0x1f;
+
+            tmp = load_reg(s, rm);
+
+            gen_arm_shift_im(tmp, op, shift, s->condexec_mask == 0);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            store_reg(s, rd, tmp);
+
+        }
+
+        break;
+
+    case 2: case 3:
+
+         
+
+        op = (insn >> 11) & 3;
+
+        rd = (insn >> 8) & 0x7;
+
+        if (op == 0) {  
+
+            tmp = new_tmp();
+
+            tcg_gen_movi_i32(tmp, insn & 0xff);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+            tmp = load_reg(s, rd);
+
+            tmp2 = new_tmp();
+
+            tcg_gen_movi_i32(tmp2, insn & 0xff);
+
+            switch (op) {
+
+            case 1:  
+
+                gen_helper_sub_cc(tmp, tmp, tmp2);
+
+                dead_tmp(tmp);
+
+                dead_tmp(tmp2);
+
+                break;
+
+            case 2:  
+
+                if (s->condexec_mask)
+
+                    tcg_gen_add_i32(tmp, tmp, tmp2);
+
+                else
+
+                    gen_helper_add_cc(tmp, tmp, tmp2);
+
+                dead_tmp(tmp2);
+
+                store_reg(s, rd, tmp);
+
+                break;
+
+            case 3:  
+
+                if (s->condexec_mask)
+
+                    tcg_gen_sub_i32(tmp, tmp, tmp2);
+
+                else
+
+                    gen_helper_sub_cc(tmp, tmp, tmp2);
+
+                dead_tmp(tmp2);
+
+                store_reg(s, rd, tmp);
+
+                break;
+
+            }
+
+        }
+
+        break;
+
+    case 4:
+
+        if (insn & (1 << 11)) {
+
+            rd = (insn >> 8) & 7;
+
+             
+
+            val = s->pc + 2 + ((insn & 0xff) * 4);
+
+            val &= ~(uint32_t)2;
+
+            addr = new_tmp();
+
+            tcg_gen_movi_i32(addr, val);
+
+            tmp = gen_ld32(addr, IS_USER(s));
+
+            dead_tmp(addr);
+
+            store_reg(s, rd, tmp);
+
+            break;
+
+        }
+
+        if (insn & (1 << 10)) {
+
+             
+
+            rd = (insn & 7) | ((insn >> 4) & 8);
+
+            rm = (insn >> 3) & 0xf;
+
+            op = (insn >> 8) & 3;
+
+            switch (op) {
+
+            case 0:  
+
+                tmp = load_reg(s, rd);
+
+                tmp2 = load_reg(s, rm);
+
+                tcg_gen_add_i32(tmp, tmp, tmp2);
+
+                dead_tmp(tmp2);
+
+                store_reg(s, rd, tmp);
+
+                break;
+
+            case 1:  
+
+                tmp = load_reg(s, rd);
+
+                tmp2 = load_reg(s, rm);
+
+                gen_helper_sub_cc(tmp, tmp, tmp2);
+
+                dead_tmp(tmp2);
+
+                dead_tmp(tmp);
+
+                break;
+
+            case 2:  
+
+                tmp = load_reg(s, rm);
+
+                store_reg(s, rd, tmp);
+
+                break;
+
+            case 3: 
+
+                tmp = load_reg(s, rm);
+
+                if (insn & (1 << 7)) {
+
+                    val = (uint32_t)s->pc | 1;
+
+                    tmp2 = new_tmp();
+
+                    tcg_gen_movi_i32(tmp2, val);
+
+                    store_reg(s, 14, tmp2);
+
+                }
+
+                gen_bx(s, tmp);
+
+                break;
+
+            }
+
+            break;
+
+        }
+
+
+
+         
+
+        rd = insn & 7;
+
+        rm = (insn >> 3) & 7;
+
+        op = (insn >> 6) & 0xf;
+
+        if (op == 2 || op == 3 || op == 4 || op == 7) {
+
+             
+
+            val = rm;
+
+            rm = rd;
+
+            rd = val;
+
+            val = 1;
+
+        } else {
+
+            val = 0;
+
+        }
+
+
+
+        if (op == 9) {  
+
+            tmp = new_tmp();
+
+            tcg_gen_movi_i32(tmp, 0);
+
+        } else if (op != 0xf) {  
+
+            tmp = load_reg(s, rd);
+
+        } else {
+
+            TCGV_UNUSED(tmp);
+
+        }
+
+
+
+        tmp2 = load_reg(s, rm);
+
+        switch (op) {
+
+        case 0x0:  
+
+            tcg_gen_and_i32(tmp, tmp, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            break;
+
+        case 0x1:  
+
+            tcg_gen_xor_i32(tmp, tmp, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            break;
+
+        case 0x2:  
+
+            if (s->condexec_mask) {
+
+                gen_helper_shl(tmp2, tmp2, tmp);
+
+            } else {
+
+                gen_helper_shl_cc(tmp2, tmp2, tmp);
+
+                gen_logic_CC(tmp2);
+
+            }
+
+            break;
+
+        case 0x3:  
+
+            if (s->condexec_mask) {
+
+                gen_helper_shr(tmp2, tmp2, tmp);
+
+            } else {
+
+                gen_helper_shr_cc(tmp2, tmp2, tmp);
+
+                gen_logic_CC(tmp2);
+
+            }
+
+            break;
+
+        case 0x4:  
+
+            if (s->condexec_mask) {
+
+                gen_helper_sar(tmp2, tmp2, tmp);
+
+            } else {
+
+                gen_helper_sar_cc(tmp2, tmp2, tmp);
+
+                gen_logic_CC(tmp2);
+
+            }
+
+            break;
+
+        case 0x5:  
+
+            if (s->condexec_mask)
+
+                gen_adc(tmp, tmp2);
+
+            else
+
+                gen_helper_adc_cc(tmp, tmp, tmp2);
+
+            break;
+
+        case 0x6:  
+
+            if (s->condexec_mask)
+
+                gen_sub_carry(tmp, tmp, tmp2);
+
+            else
+
+                gen_helper_sbc_cc(tmp, tmp, tmp2);
+
+            break;
+
+        case 0x7:  
+
+            if (s->condexec_mask) {
+
+                tcg_gen_andi_i32(tmp, tmp, 0x1f);
+
+                tcg_gen_rotr_i32(tmp2, tmp2, tmp);
+
+            } else {
+
+                gen_helper_ror_cc(tmp2, tmp2, tmp);
+
+                gen_logic_CC(tmp2);
+
+            }
+
+            break;
+
+        case 0x8:  
+
+            tcg_gen_and_i32(tmp, tmp, tmp2);
+
+            gen_logic_CC(tmp);
+
+            rd = 16;
+
+            break;
+
+        case 0x9:  
+
+            if (s->condexec_mask)
+
+                tcg_gen_neg_i32(tmp, tmp2);
+
+            else
+
+                gen_helper_sub_cc(tmp, tmp, tmp2);
+
+            break;
+
+        case 0xa:  
+
+            gen_helper_sub_cc(tmp, tmp, tmp2);
+
+            rd = 16;
+
+            break;
+
+        case 0xb:  
+
+            gen_helper_add_cc(tmp, tmp, tmp2);
+
+            rd = 16;
+
+            break;
+
+        case 0xc:  
+
+            tcg_gen_or_i32(tmp, tmp, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            break;
+
+        case 0xd:  
+
+            tcg_gen_mul_i32(tmp, tmp, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            break;
+
+        case 0xe:  
+
+            tcg_gen_andc_i32(tmp, tmp, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp);
+
+            break;
+
+        case 0xf:  
+
+            tcg_gen_not_i32(tmp2, tmp2);
+
+            if (!s->condexec_mask)
+
+                gen_logic_CC(tmp2);
+
+            val = 1;
+
+            rm = rd;
+
+            break;
+
+        }
+
+        if (rd != 16) {
+
+            if (val) {
+
+                store_reg(s, rm, tmp2);
+
+                if (op != 0xf)
+
+                    dead_tmp(tmp);
+
+            } else {
+
+                store_reg(s, rd, tmp);
+
+                dead_tmp(tmp2);
+
+            }
+
+        } else {
+
+            dead_tmp(tmp);
+
+            dead_tmp(tmp2);
+
+        }
+
+        break;
+
+
+
+    case 5:
+
+         
+
+        rd = insn & 7;
+
+        rn = (insn >> 3) & 7;
+
+        rm = (insn >> 6) & 7;
+
+        op = (insn >> 9) & 7;
+
+        addr = load_reg(s, rn);
+
+        tmp = load_reg(s, rm);
+
+        tcg_gen_add_i32(addr, addr, tmp);
+
+        dead_tmp(tmp);
+
+
+
+        if (op < 3)  
+
+            tmp = load_reg(s, rd);
+
+
+
+        switch (op) {
+
+        case 0:  
+
+            gen_st32(tmp, addr, IS_USER(s));
+
+            break;
+
+        case 1:  
+
+            gen_st16(tmp, addr, IS_USER(s));
+
+            break;
+
+        case 2:  
+
+            gen_st8(tmp, addr, IS_USER(s));
+
+            break;
+
+        case 3:  
+
+            tmp = gen_ld8s(addr, IS_USER(s));
+
+            break;
+
+        case 4:  
+
+            tmp = gen_ld32(addr, IS_USER(s));
+
+            break;
+
+        case 5:  
+
+            tmp = gen_ld16u(addr, IS_USER(s));
+
+            break;
+
+        case 6:  
+
+            tmp = gen_ld8u(addr, IS_USER(s));
+
+            break;
+
+        case 7:  
+
+            tmp = gen_ld16s(addr, IS_USER(s));
+
+            break;
+
+        }
+
+        if (op >= 3)  
+
+            store_reg(s, rd, tmp);
+
+        dead_tmp(addr);
+
+        break;
+
+
+
+    case 6:
+
+         
+
+        rd = insn & 7;
+
+        rn = (insn >> 3) & 7;
+
+        addr = load_reg(s, rn);
+
+        val = (insn >> 4) & 0x7c;
+
+        tcg_gen_addi_i32(addr, addr, val);
+
+
+
+        if (insn & (1 << 11)) {
+
+             
+
+            tmp = gen_ld32(addr, IS_USER(s));
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+             
+
+            tmp = load_reg(s, rd);
+
+            gen_st32(tmp, addr, IS_USER(s));
+
+        }
+
+        dead_tmp(addr);
+
+        break;
+
+
+
+    case 7:
+
+         
+
+        rd = insn & 7;
+
+        rn = (insn >> 3) & 7;
+
+        addr = load_reg(s, rn);
+
+        val = (insn >> 6) & 0x1f;
+
+        tcg_gen_addi_i32(addr, addr, val);
+
+
+
+        if (insn & (1 << 11)) {
+
+             
+
+            tmp = gen_ld8u(addr, IS_USER(s));
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+             
+
+            tmp = load_reg(s, rd);
+
+            gen_st8(tmp, addr, IS_USER(s));
+
+        }
+
+        dead_tmp(addr);
+
+        break;
+
+
+
+    case 8:
+
+         
+
+        rd = insn & 7;
+
+        rn = (insn >> 3) & 7;
+
+        addr = load_reg(s, rn);
+
+        val = (insn >> 5) & 0x3e;
+
+        tcg_gen_addi_i32(addr, addr, val);
+
+
+
+        if (insn & (1 << 11)) {
+
+             
+
+            tmp = gen_ld16u(addr, IS_USER(s));
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+             
+
+            tmp = load_reg(s, rd);
+
+            gen_st16(tmp, addr, IS_USER(s));
+
+        }
+
+        dead_tmp(addr);
+
+        break;
+
+
+
+    case 9:
+
+         
+
+        rd = (insn >> 8) & 7;
+
+        addr = load_reg(s, 13);
+
+        val = (insn & 0xff) * 4;
+
+        tcg_gen_addi_i32(addr, addr, val);
+
+
+
+        if (insn & (1 << 11)) {
+
+             
+
+            tmp = gen_ld32(addr, IS_USER(s));
+
+            store_reg(s, rd, tmp);
+
+        } else {
+
+             
+
+            tmp = load_reg(s, rd);
+
+            gen_st32(tmp, addr, IS_USER(s));
+
+        }
+
+        dead_tmp(addr);
+
+        break;
+
+
+
+    case 10:
+
+         
+
+        rd = (insn >> 8) & 7;
+
+        if (insn & (1 << 11)) {
+
+             
+
+            tmp = load_reg(s, 13);
+
+        } else {
+
+             
+
+            tmp = new_tmp();
+
+            tcg_gen_movi_i32(tmp, (s->pc + 2) & ~(uint32_t)2);
+
+        }
+
+        val = (insn & 0xff) * 4;
+
+        tcg_gen_addi_i32(tmp, tmp, val);
+
+        store_reg(s, rd, tmp);
+
+        break;
+
+
+
+    case 11:
+
+         
+
+        op = (insn >> 8) & 0xf;
+
+        switch (op) {
+
+        case 0:
+
+             
+
+            tmp = load_reg(s, 13);
+
+            val = (insn & 0x7f) * 4;
+
+            if (insn & (1 << 7))
+
+                val = -(int32_t)val;
+
+            tcg_gen_addi_i32(tmp, tmp, val);
+
+            store_reg(s, 13, tmp);
+
+            break;
+
+
+
+        case 2:  
+
+            ARCH(6);
+
+            rd = insn & 7;
+
+            rm = (insn >> 3) & 7;
+
+            tmp = load_reg(s, rm);
+
+            switch ((insn >> 6) & 3) {
+
+            case 0: gen_sxth(tmp); break;
+
+            case 1: gen_sxtb(tmp); break;
+
+            case 2: gen_uxth(tmp); break;
+
+            case 3: gen_uxtb(tmp); break;
+
+            }
+
+            store_reg(s, rd, tmp);
+
+            break;
+
+        case 4: case 5: case 0xc: case 0xd:
+
+             
+
+            addr = load_reg(s, 13);
+
+            if (insn & (1 << 8))
+
+                offset = 4;
+
+            else
+
+                offset = 0;
+
+            for (i = 0; i < 8; i++) {
+
+                if (insn & (1 << i))
+
+                    offset += 4;
+
+            }
+
+            if ((insn & (1 << 11)) == 0) {
+
+                tcg_gen_addi_i32(addr, addr, -offset);
+
+            }
+
+            for (i = 0; i < 8; i++) {
+
+                if (insn & (1 << i)) {
+
+                    if (insn & (1 << 11)) {
+
+                         
+
+                        tmp = gen_ld32(addr, IS_USER(s));
+
+                        store_reg(s, i, tmp);
+
+                    } else {
+
+                         
+
+                        tmp = load_reg(s, i);
+
+                        gen_st32(tmp, addr, IS_USER(s));
+
+                    }
+
+                     
+
+                    tcg_gen_addi_i32(addr, addr, 4);
+
+                }
+
+            }
+
+            TCGV_UNUSED(tmp);
+
+            if (insn & (1 << 8)) {
+
+                if (insn & (1 << 11)) {
+
+                     
+
+                    tmp = gen_ld32(addr, IS_USER(s));
+
+                     
+
+                } else {
+
+                     
+
+                    tmp = load_reg(s, 14);
+
+                    gen_st32(tmp, addr, IS_USER(s));
+
+                }
+
+                tcg_gen_addi_i32(addr, addr, 4);
+
+            }
+
+            if ((insn & (1 << 11)) == 0) {
+
+                tcg_gen_addi_i32(addr, addr, -offset);
+
+            }
+
+             
+
+            store_reg(s, 13, addr);
+
+             
+
+            if ((insn & 0x0900) == 0x0900)
+
+                gen_bx(s, tmp);
+
+            break;
+
+
+
+        case 1: case 3: case 9: case 11:  
+
+            rm = insn & 7;
+
+            tmp = load_reg(s, rm);
+
+            s->condlabel = gen_new_label();
+
+            s->condjmp = 1;
+
+            if (insn & (1 << 11))
+
+                tcg_gen_brcondi_i32(TCG_COND_EQ, tmp, 0, s->condlabel);
+
+            else
+
+                tcg_gen_brcondi_i32(TCG_COND_NE, tmp, 0, s->condlabel);
+
+            dead_tmp(tmp);
+
+            offset = ((insn & 0xf8) >> 2) | (insn & 0x200) >> 3;
+
+            val = (uint32_t)s->pc + 2;
+
+            val += offset;
+
+            gen_jmp(s, val);
+
+            break;
+
+
+
+        case 15:  
+
+            if ((insn & 0xf) == 0) {
+
+                gen_nop_hint(s, (insn >> 4) & 0xf);
+
+                break;
+
+            }
+
+             
+
+            s->condexec_cond = (insn >> 4) & 0xe;
+
+            s->condexec_mask = insn & 0x1f;
+
+             
+
+            break;
+
+
+
+        case 0xe:  
+
+            gen_exception_insn(s, 2, EXCP_BKPT);
+
+            break;
+
+
+
+        case 0xa:  
+
+            ARCH(6);
+
+            rn = (insn >> 3) & 0x7;
+
+            rd = insn & 0x7;
+
+            tmp = load_reg(s, rn);
+
+            switch ((insn >> 6) & 3) {
+
+            case 0: tcg_gen_bswap32_i32(tmp, tmp); break;
+
+            case 1: gen_rev16(tmp); break;
+
+            case 3: gen_revsh(tmp); break;
+
+            default: goto illegal_op;
+
+            }
+
+            store_reg(s, rd, tmp);
+
+            break;
+
+
+
+        case 6:  
+
+            ARCH(6);
+
+            if (IS_USER(s))
+
+                break;
+
+            if (IS_M(env)) {
+
+                tmp = tcg_const_i32((insn & (1 << 4)) != 0);
+
+                 
+
+                if (insn & 1) {
+
+                    addr = tcg_const_i32(16);
+
+                    gen_helper_v7m_msr(cpu_env, addr, tmp);
+
+                    tcg_temp_free_i32(addr);
+
+                }
+
+                 
+
+                if (insn & 2) {
+
+                    addr = tcg_const_i32(17);
+
+                    gen_helper_v7m_msr(cpu_env, addr, tmp);
+
+                    tcg_temp_free_i32(addr);
+
+                }
+
+                tcg_temp_free_i32(tmp);
+
+                gen_lookup_tb(s);
+
+            } else {
+
+                if (insn & (1 << 4))
+
+                    shift = CPSR_A | CPSR_I | CPSR_F;
+
+                else
+
+                    shift = 0;
+
+                gen_set_psr_im(s, ((insn & 7) << 6), 0, shift);
+
+            }
+
+            break;
+
+
+
+        default:
+
+            goto undef;
+
+        }
+
+        break;
+
+
+
+    case 12:
+
+         
+
+        rn = (insn >> 8) & 0x7;
+
+        addr = load_reg(s, rn);
+
+        for (i = 0; i < 8; i++) {
+
+            if (insn & (1 << i)) {
+
+                if (insn & (1 << 11)) {
+
+                     
+
+                    tmp = gen_ld32(addr, IS_USER(s));
+
+                    store_reg(s, i, tmp);
+
+                } else {
+
+                     
+
+                    tmp = load_reg(s, i);
+
+                    gen_st32(tmp, addr, IS_USER(s));
+
+                }
+
+                 
+
+                tcg_gen_addi_i32(addr, addr, 4);
+
+            }
+
+        }
+
+         
+
+        if ((insn & (1 << rn)) == 0) {
+
+            store_reg(s, rn, addr);
+
+        } else {
+
+            dead_tmp(addr);
+
+        }
+
+        break;
+
+
+
+    case 13:
+
+         
+
+        cond = (insn >> 8) & 0xf;
+
+        if (cond == 0xe)
+
+            goto undef;
+
+
+
+        if (cond == 0xf) {
+
+             
+
+            gen_set_pc_im(s->pc);
+
+            s->is_jmp = DISAS_SWI;
+
+            break;
+
+        }
+
+         
+
+        s->condlabel = gen_new_label();
+
+        gen_test_cc(cond ^ 1, s->condlabel);
+
+        s->condjmp = 1;
+
+
+
+         
+
+        val = (uint32_t)s->pc + 2;
+
+        offset = ((int32_t)insn << 24) >> 24;
+
+        val += offset << 1;
+
+        gen_jmp(s, val);
+
+        break;
+
+
+
+    case 14:
+
+        if (insn & (1 << 11)) {
+
+            if (disas_thumb2_insn(env, s, insn))
+
+              goto undef32;
+
+            break;
+
+        }
+
+         
+
+        val = (uint32_t)s->pc;
+
+        offset = ((int32_t)insn << 21) >> 21;
+
+        val += (offset << 1) + 2;
+
+        gen_jmp(s, val);
+
+        break;
+
+
+
+    case 15:
+
+        if (disas_thumb2_insn(env, s, insn))
+
+            goto undef32;
+
+        break;
+
+    }
+
+    return;
+
+undef32:
+
+    gen_exception_insn(s, 4, EXCP_UDEF);
+
+    return;
+
+illegal_op:
+
+undef:
+
+    gen_exception_insn(s, 2, EXCP_UDEF);
+
+}

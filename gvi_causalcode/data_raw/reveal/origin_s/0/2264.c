@@ -1,0 +1,57 @@
+static void dissect_rsvp_protection_info ( proto_tree * ti , proto_tree * rsvp_object_tree , tvbuff_t * tvb , int offset , int obj_length , int rsvp_class _U_ , int type ) {
+ guint8 flags1 , lsp_flags , link_flags , seg_flags ;
+ proto_tree * ti2 , * rsvp_pi_link_flags_tree , * rsvp_pi_lsp_flags_tree , * rsvp_pi_seg_flags_tree ;
+ int offset2 = offset + 4 ;
+ proto_item_set_text ( ti , "PROTECTION_INFO: " ) ;
+ switch ( type ) {
+ case 1 : proto_tree_add_uint ( rsvp_object_tree , hf_rsvp_ctype , tvb , offset + 3 , 1 , type ) ;
+ flags1 = tvb_get_guint8 ( tvb , offset2 ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_protection_info_flags_secondary_lsp , tvb , offset2 , 1 , ENC_BIG_ENDIAN ) ;
+ link_flags = tvb_get_guint8 ( tvb , offset2 + 3 ) ;
+ ti2 = proto_tree_add_item ( rsvp_object_tree , hf_rsvp_protection_info_link_flags , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ rsvp_pi_link_flags_tree = proto_item_add_subtree ( ti2 , TREE ( TT_PROTECTION_INFO_LINK ) ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_extra_traffic , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_unprotected , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_shared , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_dedicated1_1 , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_dedicated1plus1 , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_enhanced , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_item_append_text ( ti , "%s%s%s%s%s%s%s." , flags1 & 0x80 ? "SecondaryLSP " : "" , link_flags & 0x01 ? "ExtraTraffic " : "" , link_flags & 0x02 ? "Unprotected " : "" , link_flags & 0x04 ? "Shared " : "" , link_flags & 0x08 ? "Dedicated1:1 " : "" , link_flags & 0x10 ? "Dedicated1+1 " : "" , link_flags & 0x20 ? "Enhanced " : "" ) ;
+ break ;
+ case 2 : proto_tree_add_uint ( rsvp_object_tree , hf_rsvp_ctype , tvb , offset + 3 , 1 , type ) ;
+ flags1 = tvb_get_guint8 ( tvb , offset2 ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_rfc4872_secondary , tvb , offset2 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_rfc4872_protecting , tvb , offset2 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_rfc4872_notification_msg , tvb , offset2 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_rfc4872_operational , tvb , offset2 , 1 , ENC_BIG_ENDIAN ) ;
+ lsp_flags = tvb_get_guint8 ( tvb , offset2 + 1 ) ;
+ rsvp_pi_lsp_flags_tree = proto_tree_add_subtree_format ( rsvp_object_tree , tvb , offset2 + 1 , 1 , TREE ( TT_PROTECTION_INFO_LSP ) , NULL , "LSP Flags: 0x%02x -%s%s%s%s%s%s" , lsp_flags , lsp_flags == 0 ? " Unprotected" : "" , lsp_flags & 0x01 ? " Rerouting" : "" , lsp_flags & 0x02 ? " Rerouting with extra-traffic" : "" , lsp_flags & 0x04 ? " 1:N Protection with extra-traffic" : "" , lsp_flags & 0x08 ? " 1+1 Unidirectional protection" : "" , lsp_flags & 0x10 ? " 1+1 Bidirectional protection" : "" ) ;
+ proto_tree_add_item ( rsvp_pi_lsp_flags_tree , hf_rsvp_pi_lsp_flags_full_rerouting , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_lsp_flags_tree , hf_rsvp_pi_lsp_flags_rerouting_extra , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_lsp_flags_tree , hf_rsvp_pi_lsp_flags_1_n_protection , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_lsp_flags_tree , hf_rsvp_pi_lsp_flags_1plus1_unidirectional , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_lsp_flags_tree , hf_rsvp_pi_lsp_flags_1plus1_bidirectional , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ link_flags = tvb_get_guint8 ( tvb , offset2 + 3 ) ;
+ rsvp_pi_link_flags_tree = proto_tree_add_subtree_format ( rsvp_object_tree , tvb , offset2 + 3 , 1 , TREE ( TT_PROTECTION_INFO_LINK ) , NULL , "Link Flags: 0x%02x -%s%s%s%s%s%s" , link_flags , link_flags & 0x01 ? " ExtraTraffic" : "" , link_flags & 0x02 ? " Unprotected" : "" , link_flags & 0x04 ? " Shared" : "" , link_flags & 0x08 ? " Dedicated1:1" : "" , link_flags & 0x10 ? " Dedicated1+1" : "" , link_flags & 0x20 ? " Enhanced" : "" ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_extra , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_unprotected , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_shared , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_dedicated_1_1 , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_dedicated_1plus1 , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_link_flags_tree , hf_rsvp_pi_link_flags_enhanced , tvb , offset2 + 3 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_protection_info_in_place , tvb , offset2 + 4 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_protection_info_required , tvb , offset2 + 4 , 1 , ENC_BIG_ENDIAN ) ;
+ seg_flags = tvb_get_guint8 ( tvb , offset2 + 5 ) ;
+ rsvp_pi_seg_flags_tree = proto_tree_add_subtree_format ( rsvp_object_tree , tvb , offset2 + 5 , 1 , TREE ( TT_PROTECTION_INFO_SEG ) , NULL , "Segment recovery Flags: 0x%02x - %s%s%s%s%s%s" , seg_flags , seg_flags == 0 ? " Unprotected" : "" , seg_flags & 0x01 ? " Rerouting" : "" , seg_flags & 0x02 ? " Rerouting with extra-traffic" : "" , seg_flags & 0x04 ? " 1:N Protection with extra-traffic" : "" , seg_flags & 0x08 ? " 1+1 Unidirectional protection" : "" , seg_flags & 0x10 ? " 1+1 Bidirectional protection" : "" ) ;
+ proto_tree_add_item ( rsvp_pi_seg_flags_tree , hf_rsvp_pi_seg_flags_full_rerouting , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_seg_flags_tree , hf_rsvp_pi_seg_flags_rerouting_extra , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_seg_flags_tree , hf_rsvp_pi_seg_flags_1_n_protection , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_seg_flags_tree , hf_rsvp_pi_seg_flags_1plus1_unidirectional , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_tree_add_item ( rsvp_pi_seg_flags_tree , hf_rsvp_pi_seg_flags_1plus1_bidirectional , tvb , offset2 + 1 , 1 , ENC_BIG_ENDIAN ) ;
+ proto_item_append_text ( ti , "%s%s%s%s Link:%s%s%s%s%s%s, LSP:%s%s%s%s%s%s." , flags1 & 0x80 ? "SecondaryLSP " : "" , flags1 & 0x40 ? "ProtectingLSP " : "" , flags1 & 0x20 ? "Notification " : "" , flags1 & 0x10 ? "OperationalLSP " : "" , link_flags & 0x01 ? " ExtraTraffic" : "" , link_flags & 0x02 ? " Unprotected" : "" , link_flags & 0x04 ? " Shared" : "" , link_flags & 0x08 ? " Dedicated1:1" : "" , link_flags & 0x10 ? " Dedicated1+1" : "" , link_flags & 0x20 ? " Enhanced" : "" , lsp_flags == 0 ? " Unprotected" : "" , lsp_flags & 0x01 ? " Rerouting" : "" , lsp_flags & 0x02 ? " Rerouting with extra-traffic" : "" , lsp_flags & 0x04 ? " 1:N Protection with extra-traffic" : "" , lsp_flags & 0x08 ? " 1+1 Unidirectional protection" : "" , lsp_flags & 0x10 ? " 1+1 Bidirectional protection" : "" ) ;
+ break ;
+ default : proto_tree_add_uint_format_value ( rsvp_object_tree , hf_rsvp_ctype , tvb , offset + 3 , 1 , type , "Unknown (%u)" , type ) ;
+ proto_tree_add_item ( rsvp_object_tree , hf_rsvp_protection_info_data , tvb , offset2 , obj_length - 4 , ENC_NA ) ;
+ break ;
+ }
+ }

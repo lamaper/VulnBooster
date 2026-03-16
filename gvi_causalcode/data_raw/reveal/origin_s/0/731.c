@@ -1,0 +1,31 @@
+TEST_F ( ShortcutsBackendTest , DeleteShortcuts ) {
+ InitBackend ( ) ;
+ ShortcutsDatabase : : Shortcut shortcut1 ( "BD85DBA2-8C29-49F9-84AE-48E1E90880DF" , base : : ASCIIToUTF16 ( "goog" ) , MatchCoreForTesting ( "http://www.google.com" ) , base : : Time : : Now ( ) , 100 ) ;
+ EXPECT_TRUE ( AddShortcut ( shortcut1 ) ) ;
+ ShortcutsDatabase : : Shortcut shortcut2 ( "BD85DBA2-8C29-49F9-84AE-48E1E90880E0" , base : : ASCIIToUTF16 ( "gle" ) , MatchCoreForTesting ( "http://www.google.com" ) , base : : Time : : Now ( ) , 100 ) ;
+ EXPECT_TRUE ( AddShortcut ( shortcut2 ) ) ;
+ ShortcutsDatabase : : Shortcut shortcut3 ( "BD85DBA2-8C29-49F9-84AE-48E1E90880E1" , base : : ASCIIToUTF16 ( "sp" ) , MatchCoreForTesting ( "http://www.sport.com" ) , base : : Time : : Now ( ) , 10 ) ;
+ EXPECT_TRUE ( AddShortcut ( shortcut3 ) ) ;
+ ShortcutsDatabase : : Shortcut shortcut4 ( "BD85DBA2-8C29-49F9-84AE-48E1E90880E2" , base : : ASCIIToUTF16 ( "mov" ) , MatchCoreForTesting ( "http://www.film.com" ) , base : : Time : : Now ( ) , 10 ) ;
+ EXPECT_TRUE ( AddShortcut ( shortcut4 ) ) ;
+ ASSERT_EQ ( 4U , shortcuts_map ( ) . size ( ) ) ;
+ EXPECT_EQ ( shortcut1 . id , shortcuts_map ( ) . find ( shortcut1 . text ) -> second . id ) ;
+ EXPECT_EQ ( shortcut2 . id , shortcuts_map ( ) . find ( shortcut2 . text ) -> second . id ) ;
+ EXPECT_EQ ( shortcut3 . id , shortcuts_map ( ) . find ( shortcut3 . text ) -> second . id ) ;
+ EXPECT_EQ ( shortcut4 . id , shortcuts_map ( ) . find ( shortcut4 . text ) -> second . id ) ;
+ EXPECT_TRUE ( DeleteShortcutsWithURL ( shortcut1 . match_core . destination_url ) ) ;
+ ASSERT_EQ ( 2U , shortcuts_map ( ) . size ( ) ) ;
+ EXPECT_EQ ( 0U , shortcuts_map ( ) . count ( shortcut1 . text ) ) ;
+ EXPECT_EQ ( 0U , shortcuts_map ( ) . count ( shortcut2 . text ) ) ;
+ const ShortcutsBackend : : ShortcutMap : : const_iterator shortcut3_iter ( shortcuts_map ( ) . find ( shortcut3 . text ) ) ;
+ ASSERT_TRUE ( shortcut3_iter != shortcuts_map ( ) . end ( ) ) ;
+ EXPECT_EQ ( shortcut3 . id , shortcut3_iter -> second . id ) ;
+ const ShortcutsBackend : : ShortcutMap : : const_iterator shortcut4_iter ( shortcuts_map ( ) . find ( shortcut4 . text ) ) ;
+ ASSERT_TRUE ( shortcut4_iter != shortcuts_map ( ) . end ( ) ) ;
+ EXPECT_EQ ( shortcut4 . id , shortcut4_iter -> second . id ) ;
+ ShortcutsDatabase : : ShortcutIDs deleted_ids ;
+ deleted_ids . push_back ( shortcut3 . id ) ;
+ deleted_ids . push_back ( shortcut4 . id ) ;
+ EXPECT_TRUE ( DeleteShortcutsWithIDs ( deleted_ids ) ) ;
+ ASSERT_EQ ( 0U , shortcuts_map ( ) . size ( ) ) ;
+ }

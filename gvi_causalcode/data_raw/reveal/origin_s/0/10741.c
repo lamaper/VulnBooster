@@ -1,0 +1,34 @@
+TEST_F ( ShortcutsProviderTest , SimpleSingleMatch ) {
+ base : : string16 text ( ASCIIToUTF16 ( "go" ) ) ;
+ std : : string expected_url ( "http://www.google.com/" ) ;
+ ExpectedURLs expected_urls ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , true ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , false , expected_urls , expected_url , ASCIIToUTF16 ( "ogle.com" ) ) ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , false ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , true , expected_urls , expected_url , ASCIIToUTF16 ( "ogle.com" ) ) ;
+ text = ASCIIToUTF16 ( "abcdef.com" ) ;
+ expected_url = "http://abcdef.com/" ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , true ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , false , expected_urls , expected_url , base : : string16 ( ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , true , expected_urls , expected_url , base : : string16 ( ) ) ;
+ text = ASCIIToUTF16 ( "que" ) ;
+ expected_url = "https://www.google.com/search?q=query" ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , true ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , false , expected_urls , expected_url , ASCIIToUTF16 ( "ry" ) ) ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , false ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , true , expected_urls , expected_url , ASCIIToUTF16 ( "ry" ) ) ;
+ text = ASCIIToUTF16 ( "query" ) ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , true ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , false , expected_urls , expected_url , base : : string16 ( ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , true , expected_urls , expected_url , base : : string16 ( ) ) ;
+ text = ASCIIToUTF16 ( "word" ) ;
+ expected_url = "https://www.google.com/search?q=www.word" ;
+ expected_urls . clear ( ) ;
+ expected_urls . push_back ( ExpectedURLAndAllowedToBeDefault ( expected_url , false ) ) ;
+ RunShortcutsProviderTest ( provider_ , text , false , expected_urls , expected_url , base : : string16 ( ) ) ;
+ }

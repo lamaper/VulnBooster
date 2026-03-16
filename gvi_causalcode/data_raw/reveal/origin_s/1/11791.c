@@ -1,0 +1,55 @@
+TEST_F ( BaseSearchProviderTest , PreserveAnswersWhenDeduplicating ) {
+ TemplateURLData data ;
+ data . SetURL ( "http://foo.com/url?bar={
+searchTerms}
+" ) ;
+ std : : unique_ptr < TemplateURL > template_url ( new TemplateURL ( data ) ) ;
+ TestBaseSearchProvider : : MatchMap map ;
+ base : : string16 query = base : : ASCIIToUTF16 ( "weather los angeles" ) ;
+ base : : string16 answer_contents = base : : ASCIIToUTF16 ( "some answer content" ) ;
+ base : : string16 answer_type = base : : ASCIIToUTF16 ( "2334" ) ;
+ std : : unique_ptr < SuggestionAnswer > answer ( new SuggestionAnswer ( ) ) ;
+ answer -> set_type ( 2334 ) ;
+ EXPECT_CALL ( * provider_ , GetInput ( _ ) ) . WillRepeatedly ( Return ( AutocompleteInput ( ) ) ) ;
+ EXPECT_CALL ( * provider_ , GetTemplateURL ( _ ) ) . WillRepeatedly ( Return ( template_url . get ( ) ) ) ;
+ SearchSuggestionParser : : SuggestResult more_relevant ( query , AutocompleteMatchType : : SEARCH_HISTORY , query , base : : string16 ( ) , base : : string16 ( ) , base : : string16 ( ) , base : : string16 ( ) , nullptr , std : : string ( ) , std : : string ( ) , false , 1300 , true , false , query ) ;
+ provider_ -> AddMatchToMap ( more_relevant , std : : string ( ) , TemplateURLRef : : NO_SUGGESTION_CHOSEN , false , false , & map ) ;
+ SearchSuggestionParser : : SuggestResult less_relevant ( query , AutocompleteMatchType : : SEARCH_SUGGEST , query , base : : string16 ( ) , base : : string16 ( ) , answer_contents , answer_type , SuggestionAnswer : : copy ( answer . get ( ) ) , std : : string ( ) , std : : string ( ) , false , 850 , true , false , query ) ;
+ provider_ -> AddMatchToMap ( less_relevant , std : : string ( ) , TemplateURLRef : : NO_SUGGESTION_CHOSEN , false , false , & map ) ;
+ ASSERT_EQ ( 1U , map . size ( ) ) ;
+ AutocompleteMatch match = map . begin ( ) -> second ;
+ ASSERT_EQ ( 1U , match . duplicate_matches . size ( ) ) ;
+ AutocompleteMatch duplicate = match . duplicate_matches [ 0 ] ;
+ EXPECT_EQ ( answer_contents , match . answer_contents ) ;
+ EXPECT_EQ ( answer_type , match . answer_type ) ;
+ EXPECT_TRUE ( answer -> Equals ( * match . answer ) ) ;
+ EXPECT_EQ ( AutocompleteMatchType : : SEARCH_HISTORY , match . type ) ;
+ EXPECT_EQ ( 1300 , match . relevance ) ;
+ EXPECT_EQ ( answer_contents , duplicate . answer_contents ) ;
+ EXPECT_EQ ( answer_type , duplicate . answer_type ) ;
+ EXPECT_TRUE ( answer -> Equals ( * duplicate . answer ) ) ;
+ EXPECT_EQ ( AutocompleteMatchType : : SEARCH_SUGGEST , duplicate . type ) ;
+ EXPECT_EQ ( 850 , duplicate . relevance ) ;
+ map . clear ( ) ;
+ base : : string16 answer_contents2 = base : : ASCIIToUTF16 ( "different answer" ) ;
+ base : : string16 answer_type2 = base : : ASCIIToUTF16 ( "8242" ) ;
+ std : : unique_ptr < SuggestionAnswer > answer2 ( new SuggestionAnswer ( ) ) ;
+ answer2 -> set_type ( 8242 ) ;
+ more_relevant = SearchSuggestionParser : : SuggestResult ( query , AutocompleteMatchType : : SEARCH_HISTORY , query , base : : string16 ( ) , base : : string16 ( ) , answer_contents2 , answer_type2 , SuggestionAnswer : : copy ( answer2 . get ( ) ) , std : : string ( ) , std : : string ( ) , false , 1300 , true , false , query ) ;
+ provider_ -> AddMatchToMap ( more_relevant , std : : string ( ) , TemplateURLRef : : NO_SUGGESTION_CHOSEN , false , false , & map ) ;
+ provider_ -> AddMatchToMap ( less_relevant , std : : string ( ) , TemplateURLRef : : NO_SUGGESTION_CHOSEN , false , false , & map ) ;
+ ASSERT_EQ ( 1U , map . size ( ) ) ;
+ match = map . begin ( ) -> second ;
+ ASSERT_EQ ( 1U , match . duplicate_matches . size ( ) ) ;
+ duplicate = match . duplicate_matches [ 0 ] ;
+ EXPECT_EQ ( answer_contents2 , match . answer_contents ) ;
+ EXPECT_EQ ( answer_type2 , match . answer_type ) ;
+ EXPECT_TRUE ( answer2 -> Equals ( * match . answer ) ) ;
+ EXPECT_EQ ( AutocompleteMatchType : : SEARCH_HISTORY , match . type ) ;
+ EXPECT_EQ ( 1300 , match . relevance ) ;
+ EXPECT_EQ ( answer_contents , duplicate . answer_contents ) ;
+ EXPECT_EQ ( answer_type , duplicate . answer_type ) ;
+ EXPECT_TRUE ( answer -> Equals ( * duplicate . answer ) ) ;
+ EXPECT_EQ ( AutocompleteMatchType : : SEARCH_SUGGEST , duplicate . type ) ;
+ EXPECT_EQ ( 850 , duplicate . relevance ) ;
+ }

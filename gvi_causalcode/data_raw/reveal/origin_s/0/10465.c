@@ -1,0 +1,34 @@
+TEST_F ( ScoredHistoryMatchTest , GetTopicalityScore ) {
+ base : : string16 url = ASCIIToUTF16 ( "http://abc.def.com/path1/path2?" "arg1=val1&arg2=val2#hash_component" ) ;
+ base : : string16 title = ASCIIToUTF16 ( "here is a title" ) ;
+ const float hostname_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "abc" ) , url , title ) ;
+ const float hostname_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "bc" ) , url , title ) ;
+ const float domain_name_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "def" ) , url , title ) ;
+ const float domain_name_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "ef" ) , url , title ) ;
+ const float tld_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "com" ) , url , title ) ;
+ const float tld_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "om" ) , url , title ) ;
+ const float path_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "path1" ) , url , title ) ;
+ const float path_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "ath1" ) , url , title ) ;
+ const float arg_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "arg2" ) , url , title ) ;
+ const float arg_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "rg2" ) , url , title ) ;
+ const float protocol_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "htt" ) , url , title ) ;
+ const float protocol_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "tt" ) , url , title ) ;
+ const float title_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "her" ) , url , title ) ;
+ const float title_mid_word_score = GetTopicalityScoreOfTermAgainstURLAndTitle ( ASCIIToUTF16 ( "er" ) , url , title ) ;
+ EXPECT_GT ( hostname_score , path_score ) ;
+ EXPECT_GT ( domain_name_score , path_score ) ;
+ EXPECT_GT ( path_score , arg_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , path_mid_word_score ) ;
+ EXPECT_GT ( domain_name_mid_word_score , path_mid_word_score ) ;
+ EXPECT_GT ( domain_name_mid_word_score , arg_mid_word_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , arg_mid_word_score ) ;
+ EXPECT_GT ( arg_score , hostname_mid_word_score ) ;
+ EXPECT_GT ( arg_score , domain_name_mid_word_score ) ;
+ EXPECT_GT ( title_score , title_mid_word_score ) ;
+ EXPECT_GT ( title_score , arg_score ) ;
+ EXPECT_GT ( arg_score , title_mid_word_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , protocol_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , protocol_mid_word_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , tld_score ) ;
+ EXPECT_GT ( hostname_mid_word_score , tld_mid_word_score ) ;
+ }

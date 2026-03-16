@@ -1,0 +1,523 @@
+static int dca_subframe_header(DCAContext *s, int base_channel, int block_index)
+
+{
+
+     
+
+    int j, k;
+
+
+
+    if (get_bits_left(&s->gb) < 0)
+
+        return AVERROR_INVALIDDATA;
+
+
+
+    if (!base_channel) {
+
+        s->subsubframes[s->current_subframe]    = get_bits(&s->gb, 2) + 1;
+
+        s->partial_samples[s->current_subframe] = get_bits(&s->gb, 3);
+
+    }
+
+
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        for (k = 0; k < s->subband_activity[j]; k++)
+
+            s->prediction_mode[j][k] = get_bits(&s->gb, 1);
+
+    }
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        for (k = 0; k < s->subband_activity[j]; k++) {
+
+            if (s->prediction_mode[j][k] > 0) {
+
+                 
+
+                s->prediction_vq[j][k] = get_bits(&s->gb, 12);
+
+            }
+
+        }
+
+    }
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        for (k = 0; k < s->vq_start_subband[j]; k++) {
+
+            if (s->bitalloc_huffman[j] == 6)
+
+                s->bitalloc[j][k] = get_bits(&s->gb, 5);
+
+            else if (s->bitalloc_huffman[j] == 5)
+
+                s->bitalloc[j][k] = get_bits(&s->gb, 4);
+
+            else if (s->bitalloc_huffman[j] == 7) {
+
+                av_log(s->avctx, AV_LOG_ERROR,
+
+                       "Invalid bit allocation index\n");
+
+                return AVERROR_INVALIDDATA;
+
+            } else {
+
+                s->bitalloc[j][k] =
+
+                    get_bitalloc(&s->gb, &dca_bitalloc_index, s->bitalloc_huffman[j]);
+
+            }
+
+
+
+            if (s->bitalloc[j][k] > 26) {
+
+                 
+
+                 
+
+                return AVERROR_INVALIDDATA;
+
+            }
+
+        }
+
+    }
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        for (k = 0; k < s->subband_activity[j]; k++) {
+
+            s->transition_mode[j][k] = 0;
+
+            if (s->subsubframes[s->current_subframe] > 1 &&
+
+                k < s->vq_start_subband[j] && s->bitalloc[j][k] > 0) {
+
+                s->transition_mode[j][k] =
+
+                    get_bitalloc(&s->gb, &dca_tmode, s->transient_huffman[j]);
+
+            }
+
+        }
+
+    }
+
+
+
+    if (get_bits_left(&s->gb) < 0)
+
+        return AVERROR_INVALIDDATA;
+
+
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        const uint32_t *scale_table;
+
+        int scale_sum;
+
+
+
+        memset(s->scale_factor[j], 0,
+
+               s->subband_activity[j] * sizeof(s->scale_factor[0][0][0]) * 2);
+
+
+
+        if (s->scalefactor_huffman[j] == 6)
+
+            scale_table = scale_factor_quant7;
+
+        else
+
+            scale_table = scale_factor_quant6;
+
+
+
+         
+
+        scale_sum = 0;
+
+
+
+        for (k = 0; k < s->subband_activity[j]; k++) {
+
+            if (k >= s->vq_start_subband[j] || s->bitalloc[j][k] > 0) {
+
+                scale_sum = get_scale(&s->gb, s->scalefactor_huffman[j], scale_sum);
+
+                s->scale_factor[j][k][0] = scale_table[scale_sum];
+
+            }
+
+
+
+            if (k < s->vq_start_subband[j] && s->transition_mode[j][k]) {
+
+                 
+
+                scale_sum = get_scale(&s->gb, s->scalefactor_huffman[j], scale_sum);
+
+                s->scale_factor[j][k][1] = scale_table[scale_sum];
+
+            }
+
+        }
+
+    }
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+         
+
+        if (s->joint_intensity[j] > 0)
+
+            s->joint_huff[j] = get_bits(&s->gb, 3);
+
+    }
+
+
+
+    if (get_bits_left(&s->gb) < 0)
+
+        return AVERROR_INVALIDDATA;
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        int source_channel;
+
+
+
+         
+
+        if (s->joint_intensity[j] > 0) {
+
+            int scale = 0;
+
+            source_channel = s->joint_intensity[j] - 1;
+
+
+
+             
+
+
+
+            for (k = s->subband_activity[j]; k < s->subband_activity[source_channel]; k++) {
+
+                scale = get_scale(&s->gb, s->joint_huff[j], 0);
+
+                scale += 64;     
+
+                s->joint_scale_factor[j][k] = scale;     
+
+            }
+
+
+
+            if (!(s->debug_flag & 0x02)) {
+
+                av_log(s->avctx, AV_LOG_DEBUG,
+
+                       "Joint stereo coding not supported\n");
+
+                s->debug_flag |= 0x02;
+
+            }
+
+        }
+
+    }
+
+
+
+     
+
+    if (!base_channel && s->prim_channels > 2) {
+
+        if (s->downmix) {
+
+            for (j = base_channel; j < s->prim_channels; j++) {
+
+                s->downmix_coef[j][0] = get_bits(&s->gb, 7);
+
+                s->downmix_coef[j][1] = get_bits(&s->gb, 7);
+
+            }
+
+        } else {
+
+            int am = s->amode & DCA_CHANNEL_MASK;
+
+            for (j = base_channel; j < s->prim_channels; j++) {
+
+                s->downmix_coef[j][0] = dca_default_coeffs[am][j][0];
+
+                s->downmix_coef[j][1] = dca_default_coeffs[am][j][1];
+
+            }
+
+        }
+
+    }
+
+
+
+     
+
+    if (!base_channel && s->dynrange)
+
+        s->dynrange_coef = get_bits(&s->gb, 8);
+
+
+
+     
+
+    if (s->crc_present) {
+
+        get_bits(&s->gb, 16);
+
+    }
+
+
+
+     
+
+
+
+     
+
+    for (j = base_channel; j < s->prim_channels; j++)
+
+        for (k = s->vq_start_subband[j]; k < s->subband_activity[j]; k++)
+
+             
+
+            s->high_freq_vq[j][k] = get_bits(&s->gb, 10);
+
+
+
+     
+
+    if (!base_channel && s->lfe) {
+
+         
+
+        int lfe_samples = 2 * s->lfe * (4 + block_index);
+
+        int lfe_end_sample = 2 * s->lfe * (4 + block_index + s->subsubframes[s->current_subframe]);
+
+        float lfe_scale;
+
+
+
+        for (j = lfe_samples; j < lfe_end_sample; j++) {
+
+             
+
+            s->lfe_data[j] = get_sbits(&s->gb, 8);
+
+        }
+
+
+
+         
+
+        s->lfe_scale_factor = scale_factor_quant7[get_bits(&s->gb, 8)];
+
+
+
+         
+
+        lfe_scale = 0.035 * s->lfe_scale_factor;
+
+
+
+        for (j = lfe_samples; j < lfe_end_sample; j++)
+
+            s->lfe_data[j] *= lfe_scale;
+
+    }
+
+
+    av_log(s->avctx, AV_LOG_DEBUG, "subsubframes: %i\n",
+
+           s->subsubframes[s->current_subframe]);
+
+    av_log(s->avctx, AV_LOG_DEBUG, "partial samples: %i\n",
+
+           s->partial_samples[s->current_subframe]);
+
+
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        av_log(s->avctx, AV_LOG_DEBUG, "prediction mode:");
+
+        for (k = 0; k < s->subband_activity[j]; k++)
+
+            av_log(s->avctx, AV_LOG_DEBUG, " %i", s->prediction_mode[j][k]);
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        for (k = 0; k < s->subband_activity[j]; k++)
+
+            av_log(s->avctx, AV_LOG_DEBUG,
+
+                   "prediction coefs: %f, %f, %f, %f\n",
+
+                   (float) adpcm_vb[s->prediction_vq[j][k]][0] / 8192,
+
+                   (float) adpcm_vb[s->prediction_vq[j][k]][1] / 8192,
+
+                   (float) adpcm_vb[s->prediction_vq[j][k]][2] / 8192,
+
+                   (float) adpcm_vb[s->prediction_vq[j][k]][3] / 8192);
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        av_log(s->avctx, AV_LOG_DEBUG, "bitalloc index: ");
+
+        for (k = 0; k < s->vq_start_subband[j]; k++)
+
+            av_log(s->avctx, AV_LOG_DEBUG, "%2.2i ", s->bitalloc[j][k]);
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        av_log(s->avctx, AV_LOG_DEBUG, "Transition mode:");
+
+        for (k = 0; k < s->subband_activity[j]; k++)
+
+            av_log(s->avctx, AV_LOG_DEBUG, " %i", s->transition_mode[j][k]);
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        av_log(s->avctx, AV_LOG_DEBUG, "Scale factor:");
+
+        for (k = 0; k < s->subband_activity[j]; k++) {
+
+            if (k >= s->vq_start_subband[j] || s->bitalloc[j][k] > 0)
+
+                av_log(s->avctx, AV_LOG_DEBUG, " %i", s->scale_factor[j][k][0]);
+
+            if (k < s->vq_start_subband[j] && s->transition_mode[j][k])
+
+                av_log(s->avctx, AV_LOG_DEBUG, " %i(t)", s->scale_factor[j][k][1]);
+
+        }
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++) {
+
+        if (s->joint_intensity[j] > 0) {
+
+            int source_channel = s->joint_intensity[j] - 1;
+
+            av_log(s->avctx, AV_LOG_DEBUG, "Joint scale factor index:\n");
+
+            for (k = s->subband_activity[j]; k < s->subband_activity[source_channel]; k++)
+
+                av_log(s->avctx, AV_LOG_DEBUG, " %i", s->joint_scale_factor[j][k]);
+
+            av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+        }
+
+    }
+
+    if (!base_channel && s->prim_channels > 2 && s->downmix) {
+
+        av_log(s->avctx, AV_LOG_DEBUG, "Downmix coeffs:\n");
+
+        for (j = 0; j < s->prim_channels; j++) {
+
+            av_log(s->avctx, AV_LOG_DEBUG, "Channel 0, %d = %f\n", j,
+
+                   dca_downmix_coeffs[s->downmix_coef[j][0]]);
+
+            av_log(s->avctx, AV_LOG_DEBUG, "Channel 1, %d = %f\n", j,
+
+                   dca_downmix_coeffs[s->downmix_coef[j][1]]);
+
+        }
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+    for (j = base_channel; j < s->prim_channels; j++)
+
+        for (k = s->vq_start_subband[j]; k < s->subband_activity[j]; k++)
+
+            av_log(s->avctx, AV_LOG_DEBUG, "VQ index: %i\n", s->high_freq_vq[j][k]);
+
+    if (!base_channel && s->lfe) {
+
+        int lfe_samples = 2 * s->lfe * (4 + block_index);
+
+        int lfe_end_sample = 2 * s->lfe * (4 + block_index + s->subsubframes[s->current_subframe]);
+
+
+
+        av_log(s->avctx, AV_LOG_DEBUG, "LFE samples:\n");
+
+        for (j = lfe_samples; j < lfe_end_sample; j++)
+
+            av_log(s->avctx, AV_LOG_DEBUG, " %f", s->lfe_data[j]);
+
+        av_log(s->avctx, AV_LOG_DEBUG, "\n");
+
+    }
+
+
+
+
+    return 0;
+
+}
