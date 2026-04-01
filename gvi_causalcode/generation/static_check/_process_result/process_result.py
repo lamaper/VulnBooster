@@ -1,4 +1,8 @@
 import xml.etree.ElementTree as ET
+from argparse import ArgumentParser
+from pathlib import Path
+import pprint
+
 import pandas as pd
 
 def parse_cppcheck(xml_file):
@@ -282,46 +286,37 @@ def count_consistent_files(level_counts):
 
 
 
-if __name__ == '__main__':
+def parse_args():
+    script_dir = Path(__file__).resolve().parent
+    parser = ArgumentParser(description="Merge static-analysis reports and count cross-tool votes.")
+    parser.add_argument(
+        "--result-dir",
+        default=str(script_dir / "result_data"),
+        help="Directory containing cppcheck.xml, flawfinder.csv, rats.xml, and tscancode.xml.",
+    )
+    parser.add_argument("--min-level", type=int, default=3, help="Minimum mapped severity level to count.")
+    parser.add_argument("--min-tool", type=int, default=4, help="Minimum number of tools for consistency.")
+    return parser.parse_args()
 
-    # 调用函数解析Cppcheck的XML报告
-    cppcheck = parse_cppcheck('/root/reveal/static_check/_process_result/result_data/cppcheck.xml')
-    # 调用函数解析Flawfinder的CSV报告
-    flawfinder = parse_flawfinder('/root/reveal/static_check/_process_result/result_data/flawfinder.csv')
-    # 调用函数解析RATS的XML报告
-    rats = parse_rats('/root/reveal/static_check/_process_result/result_data/rats.xml')
-    # 调用函数解析TscanCode的XML报告
-    tscancode = parse_tscancode('/root/reveal/static_check/_process_result/result_data/tscancode.xml')
 
-    # # 调用函数解析Cppcheck的XML报告
-    # cppcheck = parse_cppcheck('/root/devign/data/static_check/_process_result/result_data/cppcheck.xml')
-    # # 调用函数解析Flawfinder的CSV报告
-    # flawfinder = parse_flawfinder('/root/devign/data/static_check/_process_result/result_data/flawfinder.csv')
-    # # 调用函数解析RATS的XML报告
-    # rats = parse_rats('/root/devign/data/static_check/_process_result/result_data/rats.xml')
-    # # 调用函数解析TscanCode的XML报告
-    # tscancode = parse_tscancode('/root/devign/data/static_check/_process_result/result_data/tscancode.xml')
+def main():
+    args = parse_args()
+    result_dir = Path(args.result_dir).resolve()
 
-    # print(f"Cppcheck报告中的漏洞数量：{len(cppcheck)}")
-    # print(f"Flawfinder报告中的漏洞数量：{len(flawfinder)}")
-    # print(f"RATS报告中的漏洞数量：{len(rats)}")
-    # print(f"TscanCode报告中的漏洞数量：{len(tscancode)}")
+    cppcheck = parse_cppcheck(result_dir / 'cppcheck.xml')
+    flawfinder = parse_flawfinder(result_dir / 'flawfinder.csv')
+    rats = parse_rats(result_dir / 'rats.xml')
+    tscancode = parse_tscancode(result_dir / 'tscancode.xml')
 
     cppcheck = mapping(cppcheck, 'cppcheck')
     flawfinder = mapping(flawfinder, 'flawfinder')
     rats = mapping(rats, 'rats')
     tscancode = mapping(tscancode, 'tscancode')
 
-    # 将所有工具的结果合并到一个列表中
     all_results = cppcheck + flawfinder + rats + tscancode
+    vote_counts = count_votes(all_results, min_level=args.min_level, min_tool=args.min_tool)
 
-    # 使用count_votes函数统计总体投票结果
-    vote_counts = count_votes(all_results, min_level=3, min_tool=4)
-
-    import pprint
     pp = pprint.PrettyPrinter(indent=4)
-    # pp.pprint(vote_counts)
-
 
     file_counts = count_files(vote_counts)
     pp.pprint(file_counts)
@@ -333,8 +328,5 @@ if __name__ == '__main__':
     pp.pprint(consistent_files)
 
 
-
-
-
-
-
+if __name__ == '__main__':
+    main()

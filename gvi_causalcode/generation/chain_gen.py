@@ -15,9 +15,12 @@ warnings.filterwarnings('ignore')
 
 # ----------------- 1. 获取配置信息 -----------------
 # 优先读取 GEMINI_API_KEY，如果没有则回退读取 OPENAI_API_KEY
-API_KEY = getattr(config, 'GEMINI_API_KEY', getattr(config, 'OPENAI_API_KEY', os.getenv("OPENAI_API_KEY")))
-# 强制使用你指定的 Gemini 3.1 Pro 模型
-MODEL = "gemini-3-flash-preview"
+API_KEY = (
+    getattr(config, 'GEMINI_API_KEY', '')
+    or getattr(config, 'OPENAI_API_KEY', '')
+    or os.getenv("OPENAI_API_KEY", "")
+)
+MODEL = getattr(config, 'MODEL', os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
 
 # 注意：生成干预样本必须使用“纯漏洞数据”作为种子！
 origin_vul_data = config.origin_vul_data
@@ -39,6 +42,9 @@ def get_output_path(index, file_name):
 
 
 def gen():
+    if not API_KEY:
+        raise RuntimeError("Missing API key. Please set GEMINI_API_KEY or OPENAI_API_KEY before running generation.")
+
     print(f"🚀 正在加载种子漏洞数据: {origin_vul_data}")
     with open(origin_vul_data, 'r', encoding='utf-8') as f:
         data = json.load(f)

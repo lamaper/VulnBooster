@@ -1,5 +1,0 @@
-static void check_locale_and_encoding ( DbInfo * olddb , DbInfo * newdb ) {
- if ( olddb -> db_encoding != newdb -> db_encoding ) pg_fatal ( "encodings for database \"%s\" do not match: old \"%s\", new \"%s\"\n" , olddb -> db_name , pg_encoding_to_char ( olddb -> db_encoding ) , pg_encoding_to_char ( newdb -> db_encoding ) ) ;
- if ( ! equivalent_locale ( LC_COLLATE , olddb -> db_collate , newdb -> db_collate ) ) pg_fatal ( "lc_collate values for database \"%s\" do not match: old \"%s\", new \"%s\"\n" , olddb -> db_name , olddb -> db_collate , newdb -> db_collate ) ;
- if ( ! equivalent_locale ( LC_CTYPE , olddb -> db_ctype , newdb -> db_ctype ) ) pg_fatal ( "lc_ctype values for database \"%s\" do not match: old \"%s\", new \"%s\"\n" , olddb -> db_name , olddb -> db_ctype , newdb -> db_ctype ) ;
- }

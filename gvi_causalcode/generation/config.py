@@ -1,10 +1,11 @@
 import os
 
 # ================= 1. Gemini API 配置 =================
-# 填入你的 Google Gemini API Key
-GEMINI_API_KEY = "AIzaSyBURdaCC5tjXsR_hNk-fQzCHdokUDQPb3Y" 
+# 使用环境变量提供密钥，避免把敏感信息提交到仓库里
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # 推荐使用 gemini-1.5-pro 或 gemini-2.0-flash
-MODEL = "gemini-3-flash-preview" 
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 # ================= 2. 路径配置 (适配 ReVeal) =================
 # ⚠️注意：大模型进行“漏洞想象”时，只需要“漏洞代码”作为种子！

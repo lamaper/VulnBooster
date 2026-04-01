@@ -1,3 +1,0 @@
-void ShowFolderUploadConfirmationDialog ( const base : : FilePath & path , base : : OnceCallback < void ( const std : : vector < ui : : SelectedFileInfo > & ) > callback , std : : vector < ui : : SelectedFileInfo > selected_files , content : : WebContents * web_contents ) {
- FolderUploadConfirmationView : : ShowDialog ( path , std : : move ( callback ) , std : : move ( selected_files ) , web_contents ) ;
- }

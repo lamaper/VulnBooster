@@ -1,2 +1,0 @@
-void xsltFreeLocale ( xsltLocale locale ) {
-

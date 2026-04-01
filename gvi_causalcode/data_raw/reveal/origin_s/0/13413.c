@@ -1,6 +1,0 @@
-static void alloc_util_frame_buffers ( VP9_COMP * cpi ) {
- VP9_COMMON * const cm = & cpi -> common ;
- if ( vp9_realloc_frame_buffer ( & cpi -> last_frame_uf , cm -> width , cm -> height , cm -> subsampling_x , cm -> subsampling_y , # if CONFIG_VP9_HIGHBITDEPTH cm -> use_highbitdepth , # endif VP9_ENC_BORDER_IN_PIXELS , NULL , NULL , NULL ) ) vpx_internal_error ( & cm -> error , VPX_CODEC_MEM_ERROR , "Failed to allocate last frame buffer" ) ;
- if ( vp9_realloc_frame_buffer ( & cpi -> scaled_source , cm -> width , cm -> height , cm -> subsampling_x , cm -> subsampling_y , # if CONFIG_VP9_HIGHBITDEPTH cm -> use_highbitdepth , # endif VP9_ENC_BORDER_IN_PIXELS , NULL , NULL , NULL ) ) vpx_internal_error ( & cm -> error , VPX_CODEC_MEM_ERROR , "Failed to allocate scaled source buffer" ) ;
- if ( vp9_realloc_frame_buffer ( & cpi -> scaled_last_source , cm -> width , cm -> height , cm -> subsampling_x , cm -> subsampling_y , # if CONFIG_VP9_HIGHBITDEPTH cm -> use_highbitdepth , # endif VP9_ENC_BORDER_IN_PIXELS , NULL , NULL , NULL ) ) vpx_internal_error ( & cm -> error , VPX_CODEC_MEM_ERROR , "Failed to allocate scaled last source buffer" ) ;
- }
