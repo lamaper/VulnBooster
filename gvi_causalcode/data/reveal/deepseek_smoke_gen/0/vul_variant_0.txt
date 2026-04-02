@@ -1,0 +1,197 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 0
+SeedId: unknown
+SeedFile: vul_variant_0.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static int alloc_addbyter ( int output , FILE * data ) {
+ struct asprintf * infop = ( struct asprintf * ) data ;
+ unsigned char outc = ( unsigned char ) output ;
+ if ( ! infop -> buffer ) {
+ infop -> buffer = malloc ( 32 ) ;
+ if ( ! infop -> buffer ) {
+ infop -> fail = 1 ;
+ return - 1 ;
+ }
+ infop -> alloc = 32 ;
+ infop -> len = 0 ;
+ }
+ else if ( infop -> len + 1 >= infop -> alloc ) {
+ char * newptr ;
+ newptr = realloc ( infop -> buffer , infop -> alloc * 2 ) ;
+ if ( ! newptr ) {
+ infop -> fail = 1 ;
+ return - 1 ;
+ }
+ infop -> buffer = newptr ;
+ infop -> alloc *= 2 ;
+ }
+ infop -> buffer [ infop -> len ] = outc ;
+ infop -> len ++ ;
+ return outc ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Integer overflow leading to buffer overflow
+- Vulnerability Trigger: When infop->len + 1 >= infop->alloc, the condition may incorrectly pass due to integer overflow if infop->len is near maximum integer value, causing insufficient reallocation.
+- Risky API or Data Flow: realloc with infop->alloc * 2 may overflow if infop->alloc is large, leading to smaller allocation than needed.
+- Mutation Suggestions: Change the growth factor, modify condition to infop->len >= infop->alloc - 1, introduce signedness mismatch, or alter initial allocation size.
+
+=== User Turn 2 ===
+Now generate exactly 2 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int buffer_append_char(int ch, void *ctx) {
+    struct dynamic_buf *buf = (struct dynamic_buf *)ctx;
+    unsigned char byte = (unsigned char)ch;
+    
+    if (!buf->data) {
+        buf->data = malloc(16);
+        if (!buf->data) {
+            buf->error = 1;
+            return -1;
+        }
+        buf->capacity = 16;
+        buf->size = 0;
+    }
+    
+    if (buf->size + 1 > buf->capacity) {
+        size_t new_cap = buf->capacity * 3;
+        char *new_data = realloc(buf->data, new_cap);
+        if (!new_data) {
+            buf->error = 1;
+            return -1;
+        }
+        buf->data = new_data;
+        buf->capacity = new_cap;
+    }
+    
+    buf->data[buf->size] = byte;
+    buf->size++;
+    return byte;
+}
+```
+
+```c
+static int growable_write(int output, FILE *userp) {
+    struct string_store *store = (struct string_store *)userp;
+    char outch = (char)output;
+    
+    if (store->ptr == NULL) {
+        store->ptr = malloc(64);
+        if (!store->ptr) {
+            store->failed = 1;
+            return -1;
+        }
+        store->allocated = 64;
+        store->used = 0;
+    }
+    
+    if (store->used == store->allocated - 1) {
+        size_t new_size = store->allocated + store->allocated / 2;
+        char *new_ptr = realloc(store->ptr, new_size);
+        if (!new_ptr) {
+            store->failed = 1;
+            return -1;
+        }
+        store->ptr = new_ptr;
+        store->allocated = new_size;
+    }
+    
+    store->ptr[store->used] = outch;
+    store->used++;
+    
+    if (store->used == store->allocated) {
+        store->ptr[store->used - 1] = '\0';
+    }
+    
+    return outch;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 2 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int stream_buffer_add(int byte, void *userdata) {
+    struct write_ctx *ctx = (struct write_ctx *)userdata;
+    unsigned char c = (unsigned char)byte;
+    
+    if (ctx->buf == NULL) {
+        ctx->buf = malloc(24);
+        if (!ctx->buf) {
+            ctx->oom = 1;
+            return -1;
+        }
+        ctx->total = 24;
+        ctx->pos = 0;
+    }
+    
+    if (ctx->pos >= ctx->total - 1) {
+        size_t new_total = ctx->total * 2 + 8;
+        char *new_buf = realloc(ctx->buf, new_total);
+        if (!new_buf) {
+            ctx->oom = 1;
+            return -1;
+        }
+        ctx->buf = new_buf;
+        ctx->total = new_total;
+    }
+    
+    ctx->buf[ctx->pos] = c;
+    ctx->pos++;
+    return c;
+}
+```
+
+```c
+static int accumulating_putc(int ch, FILE *stream) {
+    struct accumulator *acc = (struct accumulator *)stream;
+    char out = (char)ch;
+    
+    if (acc->buffer == NULL) {
+        acc->buffer = malloc(48);
+        if (acc->buffer == NULL) {
+            acc->status = -1;
+            return -1;
+        }
+        acc->alloc = 48;
+        acc->len = 0;
+    }
+    
+    if (acc->len + 1 >= acc->alloc) {
+        size_t new_alloc = acc->alloc * 3 / 2;
+        char *new_buf = realloc(acc->buffer, new_alloc);
+        if (new_buf == NULL) {
+            acc->status = -1;
+            return -1;
+        }
+        acc->buffer = new_buf;
+        acc->alloc = new_alloc;
+    }
+    
+    acc->buffer[acc->len] = out;
+    acc->len++;
+    
+    if (acc->len == acc->alloc) {
+        acc->buffer[acc->alloc - 1] = '\0';
+    }
+    
+    return out;
+}
+```
+

@@ -13,6 +13,7 @@
 - 用 `VulScribeR` 风格的方法扩充和提升漏洞样本质量
 - 用 `CausalCode` 提升训练鲁棒性、降低伪相关、增强跨数据集泛化
 - 当前工程路径上，优先采用“提示词 + 大模型 + 后过滤”的轻量生成方案
+- 已决定默认切换到 `OpenAI-compatible API`，优先兼容 `DeepSeek` 这类低成本模型
 
 一句话理解：
 
@@ -68,6 +69,8 @@
 - 生成主入口：`gvi_causalcode/generation/chain_gen.py`
 - 生成后处理：`gvi_causalcode/generation/post_process.py`
 - 相似度与过滤：`gvi_causalcode/generation/post_analysis.py`
+- 一键 smoke 复现实验：`scripts/reproduce_smoke_experiment.sh`
+- 正式引导模型训练 + 配对域重建：`scripts/train_formal_guide_and_regenerate_domain.sh`
 
 ## 5. 我们已经验证过什么
 
@@ -145,6 +148,31 @@
 5. 再对新训练集生成配对的 `CausalCode` 干预域
 6. 最后做成组实验比较
 
+## 7.1 当前已经拍板的方法路线
+
+现在已经明确不优先做两件事：
+
+- 不优先复现完整 RAG
+- 不优先继续沿用论文中的重型 `joern` 路线
+
+当前固定采用的轻量方案是：
+
+1. seed 漏洞函数输入 LLM
+2. LLM 提炼漏洞模式
+3. LLM 生成多个漏洞变体
+4. LLM 自检并重写
+5. `gcc/clang` 做语法检查
+6. `semgrep` 风格规则做模式过滤
+7. embedding 相似度去重
+8. 合并增强数据集
+9. 再生成 `CausalCode` 配对干预域
+
+一句话记忆：
+
+- 用轻量 LLM 生成器替代重型 RAG
+- 用轻量静态分析替代重型 `joern`
+- 再把结果接到 `CausalCode`
+
 ## 8. 后续优化路线
 
 ### A. 近期最值得做的优化
@@ -161,6 +189,8 @@
 
 - 整理生成流程
 - 先把轻量提示词生成路线做成稳定基线
+- 增加 LLM 自检重写
+- 接入语法检查和 `semgrep` 风格过滤
 - 让 prompt 和参数可复现
 - 增加去重和元数据记录
 - 记录每个生成样本的来源与筛选过程

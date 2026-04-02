@@ -1,104 +1,79 @@
 import json
 import os
-from typing import Dict
 
-from langchain_community.document_loaders import JSONLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores.chroma import Chroma
-from matplotlib import pyplot as plt
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 
 import config
 
 # 从 config 读取核心路径
-origin_data = config.origin_vul_data # 这里必须和生成时的原始种子数据一致！
+origin_data = config.origin_vul_data
 rm_comments_output = config.rm_comments_output
-similarity_database_root = config.similarity_database_root
 similarity_output = config.similarity_output
-similarity_output_graph = config.similarity_output_graph
 gen_output_result_root = config.gen_output_result_root
 similarity_threshold = config.SIMILARITY_THRESHOLD
 
-def metadata_func(json_obj: Dict, default_metadata: Dict) -> Dict:
-    """
-    提取 JSON 中的元数据。
-    注意：适配了我们之前处理的 'func' 和 'target' 键名。
-    """
-    # 兼容原作者的字段和我们处理后的字段
-    code_val = json_obj.get('func', json_obj.get('code', None))
-    label_val = json_obj.get('target', json_obj.get('label', None))
-    
-    default_metadata['id'] = json_obj.get('id', 'unknown_id')
-    default_metadata['file_name'] = json_obj.get('file_name', 'unknown_file')
-    default_metadata['code'] = code_val
-    default_metadata['label'] = label_val
-    return default_metadata
+
+def _load_items(path):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items = []
+    for item in data:
+        items.append(
+            {
+                "id": item.get("id", "unknown_id"),
+                "file_name": item.get("file_name", "unknown_file"),
+                "code": item.get("func", item.get("code", "")),
+                "label": item.get("target", item.get("label", 0)),
+            }
+        )
+    return items
+
 
 def check_output():
     """
-    核心：构建向量数据库，计算生成代码与原始代码的相似度
+    轻量相似度后端：使用 TF-IDF + cosine similarity，避免依赖 Chroma/LangChain。
     """
     print(f"📦 正在加载原始种子数据: {origin_data}")
-    source_loader = JSONLoader(
-        file_path=origin_data,
-        jq_schema='.[]',
-        content_key='func', # 我们的原始数据代码键名叫 func
-        metadata_func=metadata_func,
-    )
-    
+    source_items = _load_items(origin_data)
+
     print(f"📦 正在加载生成的变异数据: {rm_comments_output}")
-    target_loader = JSONLoader(
-        file_path=rm_comments_output,
-        jq_schema='.[]',
-        content_key='func', # 变异数据的代码键名也是 func
-        metadata_func=metadata_func,
-    )
-    
-    source_documents = source_loader.load()
-    target_documents = target_loader.load()
+    target_items = _load_items(rm_comments_output)
 
-    persist_directory = similarity_database_root
+    if not source_items or not target_items:
+        raise RuntimeError("原始数据或生成数据为空，无法执行相似度分析。")
 
-    print("🧠 正在初始化 HuggingFace Embedding 模型 (第一次运行会自动下载模型)...")
-    embeddings = HuggingFaceEmbeddings()
-    
-    print("🗄️ 正在构建原始代码的 Chroma 向量数据库...")
-    db = Chroma.from_documents(
-        source_documents,
-        embeddings,
-        persist_directory=persist_directory,
-        collection_metadata={"hnsw:space": "cosine"}, # 使用余弦相似度
-    )
-    db.persist()
-    
-    # 重新加载以确保持久化成功
-    db = Chroma(
-        persist_directory=persist_directory,
-        embedding_function=embeddings,
-        collection_metadata={"hnsw:space": "cosine"},
-    )
+    print(f"🧠 使用轻量后端 `{config.SIMILARITY_BACKEND}` 计算代码相似度...")
+    source_codes = [item["code"] for item in source_items]
+    target_codes = [item["code"] for item in target_items]
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5))
+    matrix = vectorizer.fit_transform(source_codes + target_codes)
+    source_matrix = matrix[: len(source_codes)]
+    target_matrix = matrix[len(source_codes) :]
 
-    similarity =[]
-    print(f"🔍 开始为 {len(target_documents)} 条变异数据寻找最相似的原始代码...")
-    for target in target_documents:
-        # 对每一个生成的变异代码，在向量库中寻找最相似的 1 个原始代码
-        result = db.similarity_search_with_score(
-            target.page_content,
-            k=1,
-        )
-        for src_doc, score in result:
-            res = {
-                'id': target.metadata['id'],
-                'query_file_name': target.metadata['file_name'],
-                'query_code': target.metadata['code'],
-                'query_label': target.metadata['label'],
-                'result_code': src_doc.metadata['code'],
-                'similarity_score': float(score) # 强制转为 float 方便 JSON 序列化
+    similarity = []
+    print(f"🔍 开始为 {len(target_items)} 条变异数据寻找最相似的原始代码...")
+    for idx, target in enumerate(target_items):
+        scores = linear_kernel(target_matrix[idx], source_matrix).ravel()
+        best_idx = int(scores.argmax())
+        cosine_score = float(scores[best_idx])
+        distance = 1.0 - cosine_score
+        matched = source_items[best_idx]
+        similarity.append(
+            {
+                "id": target["id"],
+                "query_file_name": target["file_name"],
+                "query_code": target["code"],
+                "query_label": target["label"],
+                "result_code": matched["code"],
+                "similarity_score": distance,
+                "cosine_similarity": cosine_score,
             }
-            similarity.append(res)
+        )
 
-    # 将相似度计算结果保存下来
     os.makedirs(os.path.dirname(similarity_output), exist_ok=True)
-    with open(similarity_output, 'w', encoding='utf-8') as f:
+    with open(similarity_output, "w", encoding="utf-8") as f:
         json.dump(similarity, f, indent=4)
     print(f"✅ 相似度计算完成！结果已保存至: {similarity_output}")
 

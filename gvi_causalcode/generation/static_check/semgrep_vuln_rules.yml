@@ -1,0 +1,36 @@
+rules:
+  - id: c-dangerous-gets
+    languages: [c]
+    severity: WARNING
+    message: Avoid gets in generated vulnerable samples unless intentionally modeling an unsafe input sink.
+    pattern: gets(...)
+
+  - id: c-dangerous-strcpy
+    languages: [c]
+    severity: WARNING
+    message: strcpy is a common unsafe sink in generated vulnerable samples.
+    pattern: strcpy(...)
+
+  - id: c-dangerous-strcat
+    languages: [c]
+    severity: WARNING
+    message: strcat is a common unsafe sink in generated vulnerable samples.
+    pattern: strcat(...)
+
+  - id: c-dangerous-sprintf
+    languages: [c]
+    severity: WARNING
+    message: sprintf may indicate unchecked buffer writes.
+    pattern: sprintf(...)
+
+  - id: c-dangerous-vsprintf
+    languages: [c]
+    severity: WARNING
+    message: vsprintf may indicate unchecked buffer writes.
+    pattern: vsprintf(...)
+
+  - id: c-dangerous-memcpy
+    languages: [c]
+    severity: INFO
+    message: memcpy can participate in buffer misuse patterns and is tracked as a risky sink.
+    pattern: memcpy(...)

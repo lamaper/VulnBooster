@@ -3,7 +3,6 @@ import json
 import os
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Dict, List
 
@@ -52,61 +51,9 @@ def load_seed_data(seed_path: str) -> List[Dict]:
 
 def request_llm(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
     if not config.LLM_API_KEY:
-        raise RuntimeError("缺少 API Key。请设置 GEMINI_API_KEY、OPENAI_API_KEY 或 LLM_API_KEY。")
+        raise RuntimeError("缺少 API Key。请设置 OPENAI_API_KEY 或 LLM_API_KEY。")
 
-    if config.LLM_PROVIDER == "gemini":
-        return request_gemini(messages, temperature, top_p, max_output_tokens)
-
-    if config.LLM_PROVIDER == "openai_compatible":
-        return request_openai_compatible(messages, temperature, top_p, max_output_tokens)
-
-    raise ValueError(f"不支持的 LLM_PROVIDER: {config.LLM_PROVIDER}")
-
-
-def request_gemini(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
-    base_url = config.LLM_BASE_URL.rstrip("/")
-    model = config.MODEL
-    encoded_key = urllib.parse.quote(config.LLM_API_KEY, safe="")
-    url = f"{base_url}/models/{model}:generateContent?key={encoded_key}"
-
-    contents = []
-    for message in messages:
-        role = "model" if message["role"] == "assistant" else "user"
-        contents.append({"role": role, "parts": [{"text": message["content"]}]})
-
-    payload = {
-        "systemInstruction": {"parts": [{"text": config.SYSTEM_PROMPT}]},
-        "contents": contents,
-        "generationConfig": {
-            "temperature": temperature,
-            "topP": top_p,
-            "maxOutputTokens": max_output_tokens,
-        },
-    }
-    data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            resp_json = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Gemini 请求失败: {exc.code} {detail}") from exc
-
-    candidates = resp_json.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"Gemini 未返回候选结果: {resp_json}")
-
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(part.get("text", "") for part in parts).strip()
-    if not text:
-        raise RuntimeError(f"Gemini 返回内容为空: {resp_json}")
-    return text
+    return request_openai_compatible(messages, temperature, top_p, max_output_tokens)
 
 
 def request_openai_compatible(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
@@ -131,7 +78,7 @@ def request_openai_compatible(messages: List[Dict[str, str]], temperature: float
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=config.REQUEST_TIMEOUT_SEC) as response:
             resp_json = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
@@ -152,7 +99,8 @@ def write_run_manifest(args, total_seeds: int):
     ensure_dir(args.output_root)
     manifest_path = os.path.join(args.output_root, "_run_meta.json")
     manifest = {
-        "llm_provider": config.LLM_PROVIDER,
+        "llm_provider": "openai_compatible",
+        "llm_base_url": config.LLM_BASE_URL,
         "model": config.MODEL,
         "prompt_mode": args.prompt_mode,
         "prompt_mode_desc": PROMPT_MODE_DESCRIPTIONS[args.prompt_mode],

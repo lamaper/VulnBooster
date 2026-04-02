@@ -179,6 +179,8 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str, default="linevul") 
     parser.add_argument('--task', default='reveal') 
     parser.add_argument('--attack_type', default='token')
+    parser.add_argument('--root_dir', type=str, default='../data/')
+    parser.add_argument('--trained_model_path', type=str, default='')
     
     # 无关参数保留防止报错
     parser.add_argument('--data', type=str, default=None)
@@ -189,17 +191,13 @@ if __name__ == "__main__":
     parser.add_argument('--begin_epoch', type=int, default=15)
     opt = parser.parse_args()
 
-    root = '../data/'
+    root = opt.root_dir
     os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu
     device = torch.device("cuda:" + opt.gpu if torch.cuda.is_available() else "cpu")
 
     origin_data_path = os.path.join(root, opt.task, 'dataset', 'origin_s', 'data.pkl.gz')
-    
-    if opt.task == 'reveal':
-        n_class = 2
-        original_dataset = CodeChef(path=origin_data_path)
-    else:
-        raise ValueError("仅支持 reveal 测试！")
+    n_class = 2
+    original_dataset = CodeChef(path=origin_data_path)
         
     rand_seed = 1726
     torch.manual_seed(rand_seed)
@@ -228,18 +226,16 @@ if __name__ == "__main__":
 
     if opt.enhance_method == 'CausalCode':
         # 加载初训模型
-        trained_model_path = "../evaluation/linevul/code/linevul/saved_models/reveal_model/checkpoint-best-f1/microsoft/codebert-base"
-        
-        if not os.path.exists(trained_model_path):
-            print(f"❌ 严重错误: 找不到预训练模型 {trained_model_path}")
-            sys.exit(1)
-
-        print(f"✅ 成功加载用于提供梯度的向导模型: {trained_model_path}")
+        trained_model_path = opt.trained_model_path or "../evaluation/linevul/code/linevul/saved_models/reveal_model/checkpoint-best-f1/microsoft/codebert-base"
         classifier = LineVulClassifier(model_path="microsoft/codebert-base",
                                     num_labels=n_class,
                                     device=device,
                                     args=linevul_args).to(device)
-        classifier.model.load_state_dict(torch.load(trained_model_path, map_location=device))
+        if os.path.exists(trained_model_path):
+            print(f"✅ 成功加载用于提供梯度的向导模型: {trained_model_path}")
+            classifier.model.load_state_dict(torch.load(trained_model_path, map_location=device))
+        else:
+            print(f"⚠️ 未找到引导模型权重 {trained_model_path}，将退回到基础 CodeBERT 初始化权重继续生成干预样本。")
         classifier.eval() 
 
         if opt.attack_type == 'dead_code':

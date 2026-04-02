@@ -24,6 +24,8 @@
 
 - 训练验证：`scripts/train_short_gpu.sh`
 - 轻量漏洞生成：`scripts/run_generation_prompt.sh`
+- 一键 smoke 复现：`scripts/reproduce_smoke_experiment.sh`
+- 正式引导模型训练 + 配对域重建：`scripts/train_formal_guide_and_regenerate_domain.sh`
 
 ## 仓库策略
 

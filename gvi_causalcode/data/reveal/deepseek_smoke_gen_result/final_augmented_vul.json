@@ -1,0 +1,30 @@
+[
+    {
+        "id": 0,
+        "file_name": "0_0_1.c",
+        "func": "static int buffer_append_char(int ch, void *ctx) {\n    struct dynamic_buf *buf = (struct dynamic_buf *)ctx;\n    unsigned char byte = (unsigned char)ch;\n    \n    if (!buf->data) {\n        buf->data = malloc(16);\n        if (!buf->data) {\n            buf->error = 1;\n            return -1;\n        }\n        buf->capacity = 16;\n        buf->size = 0;\n    }\n    \n    if (buf->size + 1 > buf->capacity) {\n        size_t new_cap = buf->capacity * 3;\n        char *new_data = realloc(buf->data, new_cap);\n        if (!new_data) {\n            buf->error = 1;\n            return -1;\n        }\n        buf->data = new_data;\n        buf->capacity = new_cap;\n    }\n    \n    buf->data[buf->size] = byte;\n    buf->size++;\n    return byte;\n}",
+        "target": 1,
+        "similarity_score": 0.9107246983203823
+    },
+    {
+        "id": 1,
+        "file_name": "0_1_1.c",
+        "func": "static int growable_write(int output, FILE *userp) {\n    struct string_store *store = (struct string_store *)userp;\n    char outch = (char)output;\n    \n    if (store->ptr == NULL) {\n        store->ptr = malloc(64);\n        if (!store->ptr) {\n            store->failed = 1;\n            return -1;\n        }\n        store->allocated = 64;\n        store->used = 0;\n    }\n    \n    if (store->used == store->allocated - 1) {\n        size_t new_size = store->allocated + store->allocated / 2;\n        char *new_ptr = realloc(store->ptr, new_size);\n        if (!new_ptr) {\n            store->failed = 1;\n            return -1;\n        }\n        store->ptr = new_ptr;\n        store->allocated = new_size;\n    }\n    \n    store->ptr[store->used] = outch;\n    store->used++;\n    \n    if (store->used == store->allocated) {\n        store->ptr[store->used - 1] = '\\0';\n    }\n    \n    return outch;\n}",
+        "target": 1,
+        "similarity_score": 0.9026388575720753
+    },
+    {
+        "id": 2,
+        "file_name": "0_2_1.c",
+        "func": "static int stream_buffer_add(int byte, void *userdata) {\n    struct write_ctx *ctx = (struct write_ctx *)userdata;\n    unsigned char c = (unsigned char)byte;\n    \n    if (ctx->buf == NULL) {\n        ctx->buf = malloc(24);\n        if (!ctx->buf) {\n            ctx->oom = 1;\n            return -1;\n        }\n        ctx->total = 24;\n        ctx->pos = 0;\n    }\n    \n    if (ctx->pos >= ctx->total - 1) {\n        size_t new_total = ctx->total * 2 + 8;\n        char *new_buf = realloc(ctx->buf, new_total);\n        if (!new_buf) {\n            ctx->oom = 1;\n            return -1;\n        }\n        ctx->buf = new_buf;\n        ctx->total = new_total;\n    }\n    \n    ctx->buf[ctx->pos] = c;\n    ctx->pos++;\n    return c;\n}",
+        "target": 1,
+        "similarity_score": 0.8816640977521736
+    },
+    {
+        "id": 3,
+        "file_name": "0_3_1.c",
+        "func": "static int accumulating_putc(int ch, FILE *stream) {\n    struct accumulator *acc = (struct accumulator *)stream;\n    char out = (char)ch;\n    \n    if (acc->buffer == NULL) {\n        acc->buffer = malloc(48);\n        if (acc->buffer == NULL) {\n            acc->status = -1;\n            return -1;\n        }\n        acc->alloc = 48;\n        acc->len = 0;\n    }\n    \n    if (acc->len + 1 >= acc->alloc) {\n        size_t new_alloc = acc->alloc * 3 / 2;\n        char *new_buf = realloc(acc->buffer, new_alloc);\n        if (new_buf == NULL) {\n            acc->status = -1;\n            return -1;\n        }\n        acc->buffer = new_buf;\n        acc->alloc = new_alloc;\n    }\n    \n    acc->buffer[acc->len] = out;\n    acc->len++;\n    \n    if (acc->len == acc->alloc) {\n        acc->buffer[acc->alloc - 1] = '\\0';\n    }\n    \n    return out;\n}",
+        "target": 1,
+        "similarity_score": 0.8878423598678561
+    }
+]

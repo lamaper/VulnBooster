@@ -1,0 +1,93 @@
+{
+  "summary": {
+    "accepted": 4,
+    "rejected": 0,
+    "no_code_block_files": 0
+  },
+  "items": [
+    {
+      "source_txt": "/mnt/d/Scientific/VulnBooster/gvi_causalcode/data/reveal/deepseek_smoke_gen/0/vul_variant_0.txt",
+      "generated_variant": "0_0_1.c",
+      "accepted": true,
+      "syntax_check": {
+        "status": "passed_with_context_errors",
+        "tool": "gcc",
+        "passed": true,
+        "returncode": 1,
+        "message": "/tmp/tmpb95mou1s.c: In function \u2018buffer_append_char\u2019:\n/tmp/tmpb95mou1s.c:12:13: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   12 |     if (!buf->data) {\n      |             ^~\n/tmp/tmpb95mou1s.c:13:12: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   13 |         buf->data = malloc(16);\n      |            ^~\n/tmp/tmpb95mou1s.c:14:17: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   14 |         if (!buf->data) {\n      |                 ^~\n/tmp/tmpb95mou1s.c:15:16: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   15 |             buf->error = 1;\n      |                ^~\n/tmp/tmpb95mou1s.c:18:12: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   18 |         buf->capacity = 16;\n      |            ^~\n/tmp/tmpb95mou1s.c:19:12: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   19 |         buf->size = 0;\n      |            ^~\n/tmp/tmpb95mou1s.c:22:12: error: invalid use of undefined type \u2018struct dynamic_buf\u2019\n   22 |  "
+      },
+      "semgrep_check": {
+        "status": "passed",
+        "tool": "semgrep",
+        "passed": true,
+        "returncode": 0,
+        "finding_count": 0,
+        "rule_ids": [],
+        "message": ""
+      }
+    },
+    {
+      "source_txt": "/mnt/d/Scientific/VulnBooster/gvi_causalcode/data/reveal/deepseek_smoke_gen/0/vul_variant_0.txt",
+      "generated_variant": "0_1_1.c",
+      "accepted": true,
+      "syntax_check": {
+        "status": "passed_with_context_errors",
+        "tool": "gcc",
+        "passed": true,
+        "returncode": 1,
+        "message": "/tmp/tmp3omsfcgi.c: In function \u2018growable_write\u2019:\n/tmp/tmp3omsfcgi.c:12:14: error: invalid use of undefined type \u2018struct string_store\u2019\n   12 |     if (store->ptr == NULL) {\n      |              ^~\n/tmp/tmp3omsfcgi.c:13:14: error: invalid use of undefined type \u2018struct string_store\u2019\n   13 |         store->ptr = malloc(64);\n      |              ^~\n/tmp/tmp3omsfcgi.c:14:19: error: invalid use of undefined type \u2018struct string_store\u2019\n   14 |         if (!store->ptr) {\n      |                   ^~\n/tmp/tmp3omsfcgi.c:15:18: error: invalid use of undefined type \u2018struct string_store\u2019\n   15 |             store->failed = 1;\n      |                  ^~\n/tmp/tmp3omsfcgi.c:18:14: error: invalid use of undefined type \u2018struct string_store\u2019\n   18 |         store->allocated = 64;\n      |              ^~\n/tmp/tmp3omsfcgi.c:19:14: error: invalid use of undefined type \u2018struct string_store\u2019\n   19 |         store->used = 0;\n      |              ^~\n/tmp/tmp3omsfcgi.c:22:14: error: invalid use of undefined type"
+      },
+      "semgrep_check": {
+        "status": "passed",
+        "tool": "semgrep",
+        "passed": true,
+        "returncode": 0,
+        "finding_count": 0,
+        "rule_ids": [],
+        "message": ""
+      }
+    },
+    {
+      "source_txt": "/mnt/d/Scientific/VulnBooster/gvi_causalcode/data/reveal/deepseek_smoke_gen/0/vul_variant_0.txt",
+      "generated_variant": "0_2_1.c",
+      "accepted": true,
+      "syntax_check": {
+        "status": "passed_with_context_errors",
+        "tool": "gcc",
+        "passed": true,
+        "returncode": 1,
+        "message": "/tmp/tmp5xvw4va0.c: In function \u2018stream_buffer_add\u2019:\n/tmp/tmp5xvw4va0.c:12:12: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   12 |     if (ctx->buf == NULL) {\n      |            ^~\n/tmp/tmp5xvw4va0.c:13:12: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   13 |         ctx->buf = malloc(24);\n      |            ^~\n/tmp/tmp5xvw4va0.c:14:17: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   14 |         if (!ctx->buf) {\n      |                 ^~\n/tmp/tmp5xvw4va0.c:15:16: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   15 |             ctx->oom = 1;\n      |                ^~\n/tmp/tmp5xvw4va0.c:18:12: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   18 |         ctx->total = 24;\n      |            ^~\n/tmp/tmp5xvw4va0.c:19:12: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   19 |         ctx->pos = 0;\n      |            ^~\n/tmp/tmp5xvw4va0.c:22:12: error: invalid use of undefined type \u2018struct write_ctx\u2019\n   22 |     if (ctx->pos >="
+      },
+      "semgrep_check": {
+        "status": "passed",
+        "tool": "semgrep",
+        "passed": true,
+        "returncode": 0,
+        "finding_count": 0,
+        "rule_ids": [],
+        "message": ""
+      }
+    },
+    {
+      "source_txt": "/mnt/d/Scientific/VulnBooster/gvi_causalcode/data/reveal/deepseek_smoke_gen/0/vul_variant_0.txt",
+      "generated_variant": "0_3_1.c",
+      "accepted": true,
+      "syntax_check": {
+        "status": "passed_with_context_errors",
+        "tool": "gcc",
+        "passed": true,
+        "returncode": 1,
+        "message": "/tmp/tmppe_pda7j.c: In function \u2018accumulating_putc\u2019:\n/tmp/tmppe_pda7j.c:12:12: error: invalid use of undefined type \u2018struct accumulator\u2019\n   12 |     if (acc->buffer == NULL) {\n      |            ^~\n/tmp/tmppe_pda7j.c:13:12: error: invalid use of undefined type \u2018struct accumulator\u2019\n   13 |         acc->buffer = malloc(48);\n      |            ^~\n/tmp/tmppe_pda7j.c:14:16: error: invalid use of undefined type \u2018struct accumulator\u2019\n   14 |         if (acc->buffer == NULL) {\n      |                ^~\n/tmp/tmppe_pda7j.c:15:16: error: invalid use of undefined type \u2018struct accumulator\u2019\n   15 |             acc->status = -1;\n      |                ^~\n/tmp/tmppe_pda7j.c:18:12: error: invalid use of undefined type \u2018struct accumulator\u2019\n   18 |         acc->alloc = 48;\n      |            ^~\n/tmp/tmppe_pda7j.c:19:12: error: invalid use of undefined type \u2018struct accumulator\u2019\n   19 |         acc->len = 0;\n      |            ^~\n/tmp/tmppe_pda7j.c:22:12: error: invalid use of undefined type \u2018struct accumul"
+      },
+      "semgrep_check": {
+        "status": "passed",
+        "tool": "semgrep",
+        "passed": true,
+        "returncode": 0,
+        "finding_count": 0,
+        "rule_ids": [],
+        "message": ""
+      }
+    }
+  ]
+}

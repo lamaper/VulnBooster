@@ -51,3 +51,5 @@
 - 服务器快速部署说明保存在 `docs/SERVER_TRAINING_PLAYBOOK.md`
 - 可复用的短训练脚本在 `scripts/train_short_gpu.sh`
 - 可复用的轻量漏洞生成脚本在 `scripts/run_generation_prompt.sh`
+- 一键 smoke 复现实验脚本在 `scripts/reproduce_smoke_experiment.sh`
+- 正式引导模型训练并重建配对域的脚本在 `scripts/train_formal_guide_and_regenerate_domain.sh`

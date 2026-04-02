@@ -3,6 +3,7 @@ PROMPT_MODE_DESCRIPTIONS = {
     "direct_generate": "单轮直接生成，最轻量，适合先快速扩充数据。",
     "pattern_then_generate": "先总结漏洞模式，再按模式生成，稳定性通常比直接生成更好。",
     "self_refine_generate": "先生成，再自我筛选与重写，质量更高但耗时更多。",
+    "pattern_generate_repair": "先抽取漏洞模式，再生成，再做漏洞保持与语法可行性自检重写。",
 }
 
 
@@ -79,6 +80,30 @@ def build_turns(prompt_mode: str, code: str, num_variants: int) -> list[str]:
                 f"From your previous candidates, keep the best {num_variants} functions only. "
                 "Improve weak ones if needed so that the final set is diverse, realistic, and still vulnerable. "
                 "Output only fenced ```c``` code blocks."
+            ),
+        ]
+
+    if prompt_mode == "pattern_generate_repair":
+        return [
+            (
+                "You are given one vulnerable seed function.\n"
+                f"{seed_code}\n"
+                "First summarize the vulnerable behavior using the following headings only:\n"
+                "- Scenario\n"
+                "- Vulnerability Type\n"
+                "- Vulnerability Trigger\n"
+                "- Risky API or Data Flow\n"
+                "- Mutation Suggestions"
+            ),
+            (
+                f"Now generate exactly {num_variants} new vulnerable C functions that follow the summarized vulnerability pattern. "
+                "Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks."
+            ),
+            (
+                f"Review your previous {num_variants} functions. "
+                "Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, "
+                "syntactically plausible C, and diverse in identifiers, branches, and local context. "
+                "Output only the final fenced ```c``` code blocks."
             ),
         ]
 

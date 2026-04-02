@@ -1,23 +1,26 @@
 import os
 import re
 
-# ================= 1. LLM 接口配置 =================
-# 默认优先走 Gemini 官方 REST 接口，不再依赖 langchain。
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "") or GEMINI_API_KEY or OPENAI_API_KEY
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-MODEL = os.getenv("LLM_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
+def _env_flag(name: str, default: str = "1") -> bool:
+    return os.getenv(name, default).strip().lower() not in {"0", "false", "no", "off"}
+
+
+# ================= 1. LLM 接口配置 =================
+# 统一切换到 OpenAI-compatible API，默认兼容 DeepSeek。
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "") or OPENAI_API_KEY
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1"))
+MODEL = os.getenv("LLM_MODEL", os.getenv("OPENAI_MODEL", "deepseek-chat"))
 TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.9"))
 TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
 MAX_OUTPUT_TOKENS = int(os.getenv("GEN_MAX_OUTPUT_TOKENS", "4096"))
 REQUEST_INTERVAL_SEC = float(os.getenv("GEN_REQUEST_INTERVAL_SEC", "0"))
+REQUEST_TIMEOUT_SEC = int(os.getenv("GEN_REQUEST_TIMEOUT_SEC", "180"))
 
 # ================= 2. 生成策略配置 =================
 # 这里把原本偏论文复现的链式提示词，整理成“多种可切换的生成策略”。
-PROMPT_MODE = os.getenv("PROMPT_MODE", "direct_generate")
+PROMPT_MODE = os.getenv("PROMPT_MODE", "pattern_generate_repair")
 NUM_VARIANTS = int(os.getenv("NUM_VARIANTS", "4"))
 MAX_SAMPLES = int(os.getenv("MAX_SAMPLES", "0"))
 
@@ -47,6 +50,20 @@ rm_comments_output = os.path.join(gen_output_result_root, "chain_rm_comments.jso
 similarity_database_root = os.path.join(gen_output_result_root, "db")
 similarity_output = os.path.join(gen_output_result_root, "similarity.json")
 similarity_output_graph = os.path.join(gen_output_result_root, "similarity_hist.png")
+static_check_report = os.path.join(gen_output_result_root, "static_check_report.json")
 
 # ================= 4. 后处理与过滤配置 =================
-SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.4"))
+SIMILARITY_BACKEND = os.getenv("SIMILARITY_BACKEND", "tfidf")
+_default_similarity_threshold = "0.92" if SIMILARITY_BACKEND == "tfidf" else "0.4"
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", _default_similarity_threshold))
+SYNTAX_CHECK_ENABLED = _env_flag("SYNTAX_CHECK_ENABLED", "1")
+SYNTAX_CHECKER = os.getenv("SYNTAX_CHECKER", "auto")
+SYNTAX_TIMEOUT_SEC = int(os.getenv("SYNTAX_TIMEOUT_SEC", "15"))
+SEMGREP_ENABLED = _env_flag("SEMGREP_ENABLED", "1")
+SEMGREP_BIN = os.getenv("SEMGREP_BIN", "semgrep")
+SEMGREP_RULES = os.getenv(
+    "SEMGREP_RULES",
+    os.path.join(os.path.dirname(__file__), "static_check", "semgrep_vuln_rules.yml"),
+)
+SEMGREP_TIMEOUT_SEC = int(os.getenv("SEMGREP_TIMEOUT_SEC", "20"))
+SEMGREP_REQUIRE_MATCH = _env_flag("SEMGREP_REQUIRE_MATCH", "0")
