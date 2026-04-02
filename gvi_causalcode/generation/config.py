@@ -1,33 +1,52 @@
 import os
+import re
 
-# ================= 1. Gemini API 配置 =================
-# 使用环境变量提供密钥，避免把敏感信息提交到仓库里
+# ================= 1. LLM 接口配置 =================
+# 默认优先走 Gemini 官方 REST 接口，不再依赖 langchain。
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-# 推荐使用 gemini-1.5-pro 或 gemini-2.0-flash
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "") or GEMINI_API_KEY or OPENAI_API_KEY
 
-# ================= 2. 路径配置 (适配 ReVeal) =================
-# ⚠️注意：大模型进行“漏洞想象”时，只需要“漏洞代码”作为种子！
-# 你需要将之前处理好的漏洞数据提取为一个单独的文件
-origin_vul_data = '../data/reveal/reveal_vul_only.json' 
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+MODEL = os.getenv("LLM_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
+TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.9"))
+TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
+MAX_OUTPUT_TOKENS = int(os.getenv("GEN_MAX_OUTPUT_TOKENS", "4096"))
+REQUEST_INTERVAL_SEC = float(os.getenv("GEN_REQUEST_INTERVAL_SEC", "0"))
 
-gen_output_root = '../data/reveal/chain_reveal_gemini'
-gen_output_result_root = gen_output_root + '_result'                                    
-gen_combine_output = os.path.join(gen_output_result_root, 'chain_combine.json')         
-rm_comments_output = os.path.join(gen_output_result_root, 'chain_rm_comments.json')     
-similarity_database_root = os.path.join(gen_output_result_root, 'db')                   
-similarity_output = os.path.join(gen_output_result_root, 'similarity.json')             
-similarity_output_graph = os.path.join(gen_output_result_root, 'similarity_hist.png')   
+# ================= 2. 生成策略配置 =================
+# 这里把原本偏论文复现的链式提示词，整理成“多种可切换的生成策略”。
+PROMPT_MODE = os.getenv("PROMPT_MODE", "direct_generate")
+NUM_VARIANTS = int(os.getenv("NUM_VARIANTS", "4"))
+MAX_SAMPLES = int(os.getenv("MAX_SAMPLES", "0"))
 
-# ================= 3. GVI 核心：受 CoT 启发的思维链提示词 =================
-# 系统提示词：赋予大模型安全专家的角色
-chain_sys = "I need your help to generate some vulnerable C functions to train our ML model. Please using all your knowledge to follow the steps below.\n"
+SYSTEM_PROMPT = (
+    "You are a senior vulnerability researcher. "
+    "Your task is to generate realistic vulnerable C functions for data augmentation. "
+    "Preserve plausible software context and vulnerability mechanisms. "
+    "Do not explain unless explicitly asked. When asked to generate code, output only the requested content."
+)
 
-# 启用论文中 GVI 方法的核心：4 步完整思维链 (场景分析 -> 类型识别 -> 模式提取 -> 生成)
-chain_inputs =[
-    "\n```c\n{code}\n```\nStep 1: Application Scenario. Perform a general analysis of the application scenario of the given C language function example. Please limit your response to no more than 100 tokens. \n",
-    "Step 2: Identify Vulnerability Type. Base on step 1, identify the type of security vulnerability present in the example function code. Please limit your response to no more than 100 tokens. \n",
-    "Step 3: Extract Vulnerability Pattern. Base on step 2, extract the vulnerability pattern. Please limit your response to no more than 100 tokens.\n",
-    "Step 4: Generate Similar Examples. Base on step 1 and step 3, create 4 independent and high-quality vulnerable functions similar to the example function's application scenario and vulnerability pattern. Please limit the response examples to no less than 800 tokens. \n",
-]
+# ================= 3. 路径配置 (适配 ReVeal) =================
+# 注意：这里只读取漏洞样本作为种子。
+origin_vul_data = os.getenv("ORIGIN_VUL_DATA", "../data/reveal/reveal_vul_only.json")
+
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "_", value).strip("_") or "run"
+
+
+_default_run_tag = f"{PROMPT_MODE}_{_slugify(MODEL)}"
+GEN_RUN_TAG = os.getenv("GEN_RUN_TAG", _default_run_tag)
+
+gen_output_root = os.getenv("GEN_OUTPUT_ROOT", f"../data/reveal/{GEN_RUN_TAG}")
+gen_output_result_root = os.getenv("GEN_OUTPUT_RESULT_ROOT", gen_output_root + "_result")
+gen_combine_output = os.path.join(gen_output_result_root, "chain_combine.json")
+rm_comments_output = os.path.join(gen_output_result_root, "chain_rm_comments.json")
+similarity_database_root = os.path.join(gen_output_result_root, "db")
+similarity_output = os.path.join(gen_output_result_root, "similarity.json")
+similarity_output_graph = os.path.join(gen_output_result_root, "similarity_hist.png")
+
+# ================= 4. 后处理与过滤配置 =================
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.4"))

@@ -1,0 +1,8 @@
+# 先从 PyTorch CUDA 12.4 索引安装 torch：
+# python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.6.0+cu124
+
+transformers==5.4.0
+wandb==0.25.1
+scikit-learn==1.7.2
+pandas==2.3.3
+tqdm==4.67.3

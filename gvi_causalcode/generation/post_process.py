@@ -34,18 +34,32 @@ def remove_selected_structs(code):
     return code
 
 def extract_code_blocks(context):
-    """提取大模型输出中包裹在 ```c 和 ``` 之间的所有纯代码块，并过滤掉提示词中的原代码"""
-    
-    # 【修复核心】：切分对话，只截取 "Step 4:" 之后的文本进行代码提取
-    # 这样就完美避开了前面 Human 提示词里包裹的那段原始种子代码
-    parts = context.split("Step 4:")
-    if len(parts) >= 2:
-        target_text = parts[-1]  # 只取最后一部分（包含大模型生成的4个代码）
+    """优先从 Assistant 回答里提取代码块，兼容旧版 Step 4 输出。"""
+    assistant_sections = re.findall(
+        r"=== Assistant Turn \d+ ===\n(.*?)(?=\n=== (?:User|Assistant) Turn \d+ ===|\Z)",
+        context,
+        re.DOTALL,
+    )
+
+    if assistant_sections:
+        target_text = "\n".join(assistant_sections)
     else:
-        target_text = context    # 容错后备机制
-        
-    pattern = r'```c\n(.*?)\n```'
-    return re.findall(pattern, target_text, re.DOTALL)
+        parts = context.split("Step 4:")
+        target_text = parts[-1] if len(parts) >= 2 else context
+
+    pattern = r"```(?:c|cpp)?\s*\n(.*?)\n```"
+    matches = re.findall(pattern, target_text, re.DOTALL | re.IGNORECASE)
+
+    # 保序去重，避免同一轮自我改写把相同代码块重复保留下来。
+    unique_matches = []
+    seen = set()
+    for match in matches:
+        normalized = match.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_matches.append(normalized)
+    return unique_matches
 
 # ================= 3. 主处理流程 =================
 def process_generated_files():

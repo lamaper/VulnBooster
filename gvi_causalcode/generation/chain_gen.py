@@ -1,205 +1,241 @@
+import argparse
 import json
 import os
-import warnings
-import random
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Dict, List
+
 from tqdm import tqdm
 
-from langchain_classic.chains import ConversationChain
-from langchain_classic.memory import ConversationBufferMemory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, SystemMessagePromptTemplate
-from langchain_openai import ChatOpenAI
-
 import config
-
-warnings.filterwarnings('ignore')
-
-# ----------------- 1. 获取配置信息 -----------------
-# 优先读取 GEMINI_API_KEY，如果没有则回退读取 OPENAI_API_KEY
-API_KEY = (
-    getattr(config, 'GEMINI_API_KEY', '')
-    or getattr(config, 'OPENAI_API_KEY', '')
-    or os.getenv("OPENAI_API_KEY", "")
-)
-MODEL = getattr(config, 'MODEL', os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
-
-# 注意：生成干预样本必须使用“纯漏洞数据”作为种子！
-origin_vul_data = config.origin_vul_data
-chain_sys = config.chain_sys
-chain_inputs = config.chain_inputs
-gen_output_root = config.gen_output_root
-gen_output_result_root = config.gen_output_result_root
+from prompt_templates import PROMPT_MODE_DESCRIPTIONS, build_turns
 
 
-def get_output_path(index, file_name):
-    """安全地创建多级目录并返回输出路径"""
-    if not os.path.exists(gen_output_root):
-        os.makedirs(gen_output_root, exist_ok=True)
-    output_dir = os.path.join(gen_output_root, str(index))
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, file_name)
-    return output_path
-
-
-def gen():
-    if not API_KEY:
-        raise RuntimeError("Missing API key. Please set GEMINI_API_KEY or OPENAI_API_KEY before running generation.")
-
-    print(f"🚀 正在加载种子漏洞数据: {origin_vul_data}")
-    with open(origin_vul_data, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    print(f"✅ 共加载 {len(data)} 条漏洞种子代码。")
-
-    # ----------------- 2. 初始化 Gemini 客户端 -----------------
-    # 使用 langchain_openai 库结合 Google 官方兼容接口调用 Gemini
-    chat = ChatOpenAI(
-        model_name=MODEL,
-        api_key=API_KEY,
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        streaming=False,  # 关闭流式输出，提高稳定性
-        temperature=0.9   # 保持较高的温度以增加生成漏洞的多样性
+def parse_args():
+    parser = argparse.ArgumentParser(description="轻量漏洞生成入口，支持纯提示词与链式提示词模式。")
+    parser.add_argument(
+        "--prompt-mode",
+        default=config.PROMPT_MODE,
+        choices=sorted(PROMPT_MODE_DESCRIPTIONS.keys()),
+        help="生成策略。",
     )
-    
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(chain_sys),
-        MessagesPlaceholder(variable_name="history"),
-        HumanMessagePromptTemplate.from_template("{input}")
-    ])
+    parser.add_argument("--limit", type=int, default=config.MAX_SAMPLES, help="最多处理多少条种子。0 表示全部处理。")
+    parser.add_argument("--start-index", type=int, default=0, help="从第几条种子开始。")
+    parser.add_argument("--num-variants", type=int, default=config.NUM_VARIANTS, help="每条种子希望生成多少个漏洞变体。")
+    parser.add_argument("--temperature", type=float, default=config.TEMPERATURE, help="采样温度。")
+    parser.add_argument("--top-p", type=float, default=config.TOP_P, help="Top-p。")
+    parser.add_argument("--max-output-tokens", type=int, default=config.MAX_OUTPUT_TOKENS, help="最大输出 token。")
+    parser.add_argument("--request-interval", type=float, default=config.REQUEST_INTERVAL_SEC, help="每次请求之间的等待秒数。")
+    parser.add_argument("--output-root", default=config.gen_output_root, help="生成文本输出目录。")
+    parser.add_argument("--seed-path", default=config.origin_vul_data, help="漏洞种子 JSON 路径。")
+    parser.add_argument("--resume", action="store_true", help="如果输出文件已存在则跳过，便于断点续跑。")
+    return parser.parse_args()
 
-    # ----------------- 3. 执行 GVI 思维链生成 -----------------
-    print(f"🧠 开始使用 {MODEL} 引擎执行 GVI 思维链想象...")
-    for index, item in enumerate(tqdm(data)):
-        idx = index
-        
-        # 兼容不同的数据格式，提取源代码
-        code_text = item.get('func', item.get('code', ''))
-        if not code_text.strip():
+
+def ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
+def get_output_path(output_root: str, index: int, file_name: str) -> str:
+    ensure_dir(output_root)
+    output_dir = os.path.join(output_root, str(index))
+    ensure_dir(output_dir)
+    return os.path.join(output_dir, file_name)
+
+
+def load_seed_data(seed_path: str) -> List[Dict]:
+    with open(seed_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def request_llm(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
+    if not config.LLM_API_KEY:
+        raise RuntimeError("缺少 API Key。请设置 GEMINI_API_KEY、OPENAI_API_KEY 或 LLM_API_KEY。")
+
+    if config.LLM_PROVIDER == "gemini":
+        return request_gemini(messages, temperature, top_p, max_output_tokens)
+
+    if config.LLM_PROVIDER == "openai_compatible":
+        return request_openai_compatible(messages, temperature, top_p, max_output_tokens)
+
+    raise ValueError(f"不支持的 LLM_PROVIDER: {config.LLM_PROVIDER}")
+
+
+def request_gemini(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
+    base_url = config.LLM_BASE_URL.rstrip("/")
+    model = config.MODEL
+    encoded_key = urllib.parse.quote(config.LLM_API_KEY, safe="")
+    url = f"{base_url}/models/{model}:generateContent?key={encoded_key}"
+
+    contents = []
+    for message in messages:
+        role = "model" if message["role"] == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": message["content"]}]})
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": config.SYSTEM_PROMPT}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": temperature,
+            "topP": top_p,
+            "maxOutputTokens": max_output_tokens,
+        },
+    }
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            resp_json = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Gemini 请求失败: {exc.code} {detail}") from exc
+
+    candidates = resp_json.get("candidates") or []
+    if not candidates:
+        raise RuntimeError(f"Gemini 未返回候选结果: {resp_json}")
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text = "".join(part.get("text", "") for part in parts).strip()
+    if not text:
+        raise RuntimeError(f"Gemini 返回内容为空: {resp_json}")
+    return text
+
+
+def request_openai_compatible(messages: List[Dict[str, str]], temperature: float, top_p: float, max_output_tokens: int) -> str:
+    base_url = config.LLM_BASE_URL.rstrip("/")
+    url = f"{base_url}/chat/completions"
+    payload = {
+        "model": config.MODEL,
+        "messages": [{"role": "system", "content": config.SYSTEM_PROMPT}, *messages],
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": max_output_tokens,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config.LLM_API_KEY}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            resp_json = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"OpenAI-compatible 请求失败: {exc.code} {detail}") from exc
+
+    choices = resp_json.get("choices") or []
+    if not choices:
+        raise RuntimeError(f"接口未返回 choices: {resp_json}")
+
+    message = choices[0].get("message", {})
+    text = (message.get("content") or "").strip()
+    if not text:
+        raise RuntimeError(f"接口返回内容为空: {resp_json}")
+    return text
+
+
+def write_run_manifest(args, total_seeds: int):
+    ensure_dir(args.output_root)
+    manifest_path = os.path.join(args.output_root, "_run_meta.json")
+    manifest = {
+        "llm_provider": config.LLM_PROVIDER,
+        "model": config.MODEL,
+        "prompt_mode": args.prompt_mode,
+        "prompt_mode_desc": PROMPT_MODE_DESCRIPTIONS[args.prompt_mode],
+        "seed_path": args.seed_path,
+        "seed_count": total_seeds,
+        "limit": args.limit,
+        "start_index": args.start_index,
+        "num_variants": args.num_variants,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "max_output_tokens": args.max_output_tokens,
+        "output_root": args.output_root,
+    }
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+
+def write_transcript(output_path: str, item: Dict, sample_index: int, prompt_mode: str, turns: List[Dict[str, str]]):
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"System: {config.SYSTEM_PROMPT}\n")
+        f.write(f"PromptMode: {prompt_mode}\n")
+        f.write(f"SeedIndex: {sample_index}\n")
+        f.write(f"SeedId: {item.get('id', 'unknown')}\n")
+        f.write(f"SeedFile: {item.get('file_name', f'vul_variant_{sample_index}.txt')}\n")
+        f.write(f"Model: {config.MODEL}\n\n")
+
+        user_turn = 0
+        assistant_turn = 0
+        for message in turns:
+            if message["role"] == "user":
+                user_turn += 1
+                f.write(f"=== User Turn {user_turn} ===\n")
+                f.write(message["content"].strip() + "\n\n")
+            elif message["role"] == "assistant":
+                assistant_turn += 1
+                f.write(f"=== Assistant Turn {assistant_turn} ===\n")
+                f.write(message["content"].strip() + "\n\n")
+
+
+def run_generation(args):
+    print(f"正在加载漏洞种子数据: {args.seed_path}")
+    data = load_seed_data(args.seed_path)
+    print(f"共加载 {len(data)} 条漏洞种子。")
+
+    write_run_manifest(args, len(data))
+
+    start = max(args.start_index, 0)
+    end = len(data) if args.limit <= 0 else min(len(data), start + args.limit)
+    selected = data[start:end]
+    print(f"当前生成模式: {args.prompt_mode} -> {PROMPT_MODE_DESCRIPTIONS[args.prompt_mode]}")
+    print(f"计划处理区间: [{start}, {end})，共 {len(selected)} 条。")
+
+    for local_index, item in enumerate(tqdm(selected, desc="生成漏洞变体")):
+        sample_index = start + local_index
+        code_text = item.get("func", item.get("code", ""))
+        if not code_text or not code_text.strip():
             continue
 
-        # 【修复 BUG】：在循环内部实例化 Memory，确保每个漏洞种子的上下文绝对纯净，防止污染
-        memory = ConversationBufferMemory(memory_key="history", return_messages=True)
-        conversation = ConversationChain(memory=memory, prompt=prompt, llm=chat, verbose=False)
+        file_name = item.get("file_name", f"vul_variant_{sample_index}.txt")
+        output_path = get_output_path(args.output_root, sample_index, file_name)
+        if args.resume and os.path.exists(output_path):
+            continue
+
+        messages: List[Dict[str, str]] = []
+        turns = build_turns(args.prompt_mode, code_text, args.num_variants)
 
         try:
-            # 严格执行 config.py 中配置的 4 步思维链
-            for chain_input in chain_inputs:
-                # 【修复 BUG】：填入真正的源代码，而不是原本的 index 数字
-                c_input = chain_input.format(code=code_text)
-                conversation.predict(input=c_input)
+            for turn in turns:
+                messages.append({"role": "user", "content": turn})
+                reply = request_llm(
+                    messages=messages,
+                    temperature=args.temperature,
+                    top_p=args.top_p,
+                    max_output_tokens=args.max_output_tokens,
+                )
+                messages.append({"role": "assistant", "content": reply})
+                if args.request_interval > 0:
+                    time.sleep(args.request_interval)
 
-            # 【修复 BUG】：处理文件名缺失的情况，自动回退生成唯一标识名
-            file_name = item.get('file_name', f"vul_variant_{idx}.txt")
-            output_path = get_output_path(idx, file_name)
-            
-            # 将大模型一步步思考的完整过程写入文件
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(f'System: {chain_sys}\n')
-                f.write(memory.buffer_as_str)
-                
-        except Exception as e:
-            print(f"\n❌ 处理第 {index} 条样本时遭遇错误: {e}")
-        finally:
-            memory.clear()
-
-def few_shot():
-    dataset = 'bigvul'
-    train_path = f'./{dataset}_revision_left_2.json'
-    test_path = f'./{dataset}_revision_2.json'
-    with open(train_path, 'r') as f:
-        train_data = json.load(f)
-    vul = [item for item in train_data if item['label'] == 1]
-    saf = [item for item in train_data if item['label'] == 0]
-    train_vul_data = [item for item in vul if 0 < len(item['code']) <= 300]
-    train_saf_data = [item for item in saf if 0 < len(item['code']) <= 300]
-    print(len(train_vul_data), len(train_saf_data))
-
-    with open(test_path, 'r') as f:
-        test_data = json.load(f)
-
-    chat = ChatOpenAI(
-        # model_name='gpt-4-1106-preview',
-        model_name=MODEL,
-        streaming=True,
-        # callbacks=[StreamingStdOutCallbackHandler()],
-        temperature=.9
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(chain_sys),
-        MessagesPlaceholder(variable_name="history"),
-        HumanMessagePromptTemplate.from_template("{input}")
-    ])
-
-    memory = ConversationBufferMemory(memory_key="history", return_messages=True)
-    conversation = ConversationChain(memory=memory, prompt=prompt, llm=chat, verbose=False)
-
-    for index, item in enumerate(tqdm(test_data)):
-        # index: data中的索引
-        # idx: 生成文件的索引
-        idx = index
-        vul_examples = random.sample(train_vul_data, 10)
-        saf_examples = random.sample(train_saf_data, 10)
-
-        for chain_input in chain_inputs:
-            # pdb.set_trace()
-            # cot-shot
-            # c_input = chain_input.format(code=item['code'])
-            # 5-shot
-            # c_input = chain_input.format(
-            #     example0=vul_examples[0]['code'], label0='yes',
-            #     example1=saf_examples[0]['code'], label1='no',
-            #     example2=saf_examples[1]['code'], label2='no',
-            #     example3=saf_examples[2]['code'], label3='no',
-            #     example4=saf_examples[3]['code'], label4='no',
-            #     code=item['code'])
-            # 10-shot
-            # c_input = chain_input.format(
-            #     example0=saf_examples[0]['code'], label0='no',
-            #     example1=saf_examples[1]['code'], label1='no',
-            #     example2=saf_examples[2]['code'], label2='no',
-            #     example3=saf_examples[3]['code'], label3='no',
-            #     example4=saf_examples[4]['code'], label4='no',
-            #     example5=vul_examples[0]['code'], label5='yes',
-            #     example6=vul_examples[1]['code'], label6='yes',
-            #     example7=vul_examples[2]['code'], label7='yes',
-            #     example8=vul_examples[3]['code'], label8='yes',
-            #     example9=vul_examples[4]['code'], label9='yes',
-            #     code=item['code'])
-
-            c_input = chain_input.format(
-                example0=vul_examples[0]['code'], label0='yes',
-                example1=vul_examples[1]['code'], label1='yes',
-                example2=vul_examples[2]['code'], label2='yes',
-                example3=vul_examples[3]['code'], label3='yes',
-                example4=vul_examples[4]['code'], label4='yes',
-                example5=vul_examples[5]['code'], label5='yes',
-                example6=vul_examples[6]['code'], label6='yes',
-                example7=vul_examples[7]['code'], label7='yes',
-                example8=vul_examples[8]['code'], label8='yes',
-                example9=vul_examples[9]['code'], label9='yes',
-                example10=saf_examples[0]['code'], label10='no',
-                example11=saf_examples[1]['code'], label11='no',
-                example12=saf_examples[2]['code'], label12='no',
-                example13=saf_examples[3]['code'], label13='no',
-                example14=saf_examples[4]['code'], label14='no',
-                example15=saf_examples[5]['code'], label15='no',
-                example16=saf_examples[6]['code'], label16='no',
-                example17=saf_examples[7]['code'], label17='no',
-                example18=saf_examples[8]['code'], label18='no',
-                example19=saf_examples[9]['code'], label19='no',
-                code=item['code'])
-            # pdb.set_trace()
-            conversation.predict(input=c_input)
-        # pdb.set_trace()
-        output_path = get_output_path(idx, item['file_name'])
-        # print(memory.buffer_as_str)
-        # assert 0
-        with open(output_path, 'w') as f:
-            f.write(f'System: {chain_sys}\n')
-            f.write(memory.buffer_as_str)
-        memory.clear()
+            write_transcript(output_path, item, sample_index, args.prompt_mode, messages)
+        except Exception as exc:
+            print(f"\n处理第 {sample_index} 条样本失败: {exc}")
 
 
 if __name__ == "__main__":
-    gen()
-    # few_shot()
+    run_generation(parse_args())

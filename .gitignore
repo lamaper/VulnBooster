@@ -24,6 +24,8 @@ env/
 # Logs / experiment output
 *.log
 wandb/
+logs/
+.smoke_data/
 
 # Local docs / notes clutter
 Scientific.lnk

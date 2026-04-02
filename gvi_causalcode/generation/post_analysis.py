@@ -16,6 +16,7 @@ similarity_database_root = config.similarity_database_root
 similarity_output = config.similarity_output
 similarity_output_graph = config.similarity_output_graph
 gen_output_result_root = config.gen_output_result_root
+similarity_threshold = config.SIMILARITY_THRESHOLD
 
 def metadata_func(json_obj: Dict, default_metadata: Dict) -> Dict:
     """
@@ -113,11 +114,11 @@ def get_similar():
     with open(similarity_output, 'r', encoding='utf-8') as f:
         data = json.load(f)
         
-    print(f"⚖️ 开始根据相似度阈值 (<= 0.4) 过滤数据...")
+    print(f"⚖️ 开始根据相似度阈值 (distance <= {similarity_threshold}) 过滤数据...")
     for item in data:
         # 这里的 score 是 Chroma 返回的 distance，通常 0 代表完全一样，最大为 2
         # 保留距离小于等于 0.4 的（既有变异，又没跑偏太远）
-        if item['similarity_score'] <= 0.4:
+        if item['similarity_score'] <= similarity_threshold:
             frame = {
                 'id': index,
                 'file_name': item['query_file_name'],

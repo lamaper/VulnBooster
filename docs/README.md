@@ -1,13 +1,13 @@
-# Docs Layout
+# 文档目录说明
 
-This directory stores long-lived project documentation and local reference material.
+这个目录用于存放项目长期有效的文档和本地参考材料。
 
-## Subdirectories
+## 子目录
 
-- `notes/`: project memory, decisions, experiment notes
-- `references/`: local paper PDFs and other non-code reading material
+- `notes/`：项目记忆、阶段结论、实验笔记、恢复指南
+- `references/`：本地论文 PDF 和其他参考资料
 
-## Tracking policy
+## 跟踪策略
 
-- Notes that help development should stay in git when useful
-- Large PDFs and local-only reading material should stay ignored by git
+- 对项目推进有帮助的长期说明文档建议保留在 Git 中
+- 体积较大的本地 PDF 和临时阅读材料建议仅保留本地，不进入 Git
