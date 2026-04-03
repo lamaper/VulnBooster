@@ -1,0 +1,195 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 12
+SeedId: unknown
+SeedFile: vul_variant_12.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static int jbig2_find_changing_element_of_color ( const byte * line , int x , int w , int color ) {
+ if ( line == 0 ) return w ;
+ x = jbig2_find_changing_element ( line , x , w ) ;
+ if ( x < w && getbit ( line , x ) != color ) x = jbig2_find_changing_element ( line , x , w ) ;
+ return x ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Out-of-bounds read
+- Vulnerability Trigger: Passing a negative or out-of-range 'x' value to jbig2_find_changing_element, which may then be used to index 'line' without proper bounds validation.
+- Risky API or Data Flow: The function jbig2_find_changing_element is called with 'x' and 'w' but its internal implementation may not validate that 'x' is within [0, w], leading to unsafe memory access via getbit.
+- Mutation Suggestions: Modify the initial 'x' validation, adjust the loop conditions in jbig2_find_changing_element, change the color comparison logic, or introduce boundary checks before getbit.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int find_next_set_bit(const uint8_t *bitmap, int start, int length) {
+    if (bitmap == NULL) return length;
+    while (start < length && !GET_BIT(bitmap, start)) {
+        start++;
+    }
+    return start;
+}
+
+static int find_bit_sequence(const uint8_t *data, int pos, int max, int target) {
+    if (data == 0) return max;
+    pos = find_next_set_bit(data, pos, max);
+    if (pos < max && EXTRACT_BIT(data, pos) != target) {
+        pos = find_next_set_bit(data, pos + 1, max);
+    }
+    return pos;
+}
+```
+
+```c
+static int locate_transition(const char *buffer, int offset, int limit, int expected) {
+    if (!buffer) return limit;
+    offset = scan_for_change(buffer, offset, limit);
+    if (offset < limit && read_bit(buffer, offset) != expected) {
+        offset = scan_for_change(buffer, offset, limit);
+    }
+    return offset;
+}
+
+static int scan_for_change(const char *buf, int idx, int end) {
+    if (buf == NULL) return end;
+    int initial = read_bit(buf, idx);
+    while (idx < end && read_bit(buf, idx) == initial) {
+        idx++;
+    }
+    return idx;
+}
+```
+
+```c
+static int find_color_edge(const unsigned char *line, int x, int width, int color) {
+    if (line == NULL) return width;
+    x = next_pixel_change(line, x, width);
+    while (x < width && fetch_pixel(line, x) == color) {
+        x = next_pixel_change(line, x + 1, width);
+    }
+    return x;
+}
+
+static int next_pixel_change(const unsigned char *scanline, int pos, int w) {
+    if (scanline == 0) return w;
+    int current = fetch_pixel(scanline, pos);
+    while (pos < w && fetch_pixel(scanline, pos) == current) {
+        pos++;
+    }
+    return pos;
+}
+```
+
+```c
+static int seek_to_bit_value(const uint8_t *array, int start, int len, int val) {
+    if (array == 0) return len;
+    start = advance_until_bit(array, start, len, !val);
+    if (start < len && bit_at(array, start) == val) {
+        start = advance_until_bit(array, start, len, !val);
+    }
+    return start;
+}
+
+static int advance_until_bit(const uint8_t *mem, int p, int limit, int stop_val) {
+    if (mem == NULL) return limit;
+    while (p < limit && bit_at(mem, p) != stop_val) {
+        p++;
+    }
+    return p;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int find_next_set_bit(const uint8_t *bitmap, int start, int length) {
+    if (bitmap == NULL) return length;
+    while (start < length && !GET_BIT(bitmap, start)) {
+        start++;
+    }
+    return start;
+}
+
+static int find_bit_sequence(const uint8_t *data, int pos, int max, int target) {
+    if (data == 0) return max;
+    pos = find_next_set_bit(data, pos, max);
+    if (pos < max && EXTRACT_BIT(data, pos) != target) {
+        pos = find_next_set_bit(data, pos + 1, max);
+    }
+    return pos;
+}
+```
+
+```c
+static int locate_transition(const char *buffer, int offset, int limit, int expected) {
+    if (!buffer) return limit;
+    offset = scan_for_change(buffer, offset, limit);
+    if (offset < limit && read_bit(buffer, offset) != expected) {
+        offset = scan_for_change(buffer, offset, limit);
+    }
+    return offset;
+}
+
+static int scan_for_change(const char *buf, int idx, int end) {
+    if (buf == NULL) return end;
+    int initial = read_bit(buf, idx);
+    while (idx < end && read_bit(buf, idx) == initial) {
+        idx++;
+    }
+    return idx;
+}
+```
+
+```c
+static int find_color_edge(const unsigned char *line, int x, int width, int color) {
+    if (line == NULL) return width;
+    x = next_pixel_change(line, x, width);
+    while (x < width && fetch_pixel(line, x) == color) {
+        x = next_pixel_change(line, x + 1, width);
+    }
+    return x;
+}
+
+static int next_pixel_change(const unsigned char *scanline, int pos, int w) {
+    if (scanline == 0) return w;
+    int current = fetch_pixel(scanline, pos);
+    while (pos < w && fetch_pixel(scanline, pos) == current) {
+        pos++;
+    }
+    return pos;
+}
+```
+
+```c
+static int seek_to_bit_value(const uint8_t *array, int start, int len, int val) {
+    if (array == 0) return len;
+    start = advance_until_bit(array, start, len, !val);
+    if (start < len && bit_at(array, start) == val) {
+        start = advance_until_bit(array, start, len, !val);
+    }
+    return start;
+}
+
+static int advance_until_bit(const uint8_t *mem, int p, int limit, int stop_val) {
+    if (mem == NULL) return limit;
+    while (p < limit && bit_at(mem, p) != stop_val) {
+        p++;
+    }
+    return p;
+}
+```
+

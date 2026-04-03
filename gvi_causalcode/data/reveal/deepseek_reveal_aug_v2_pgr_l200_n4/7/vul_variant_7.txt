@@ -1,0 +1,315 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 7
+SeedId: unknown
+SeedFile: vul_variant_7.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_page_add_result ( Jbig2Ctx * ctx , Jbig2Page * page , Jbig2Image * image , int x , int y , Jbig2ComposeOp op ) {
+ if ( page -> image == NULL ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , - 1 , "page info possibly missing, no image defined" ) ;
+ return 0 ;
+ }
+ if ( page -> striped ) {
+ int new_height = y + image -> height + page -> end_row ;
+ if ( page -> image -> height < new_height ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , - 1 , "growing page buffer to %d rows " "to accomodate new stripe" , new_height ) ;
+ jbig2_image_resize ( ctx , page -> image , page -> image -> width , new_height ) ;
+ }
+ }
+ jbig2_image_compose ( ctx , page -> image , image , x , y + page -> end_row , op ) ;
+ return 0 ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Integer Overflow leading to Heap Overflow
+- Vulnerability Trigger: Addition of y + image->height + page->end_row can overflow, causing new_height to be smaller than expected, leading to insufficient buffer resize.
+- Risky API or Data Flow: Integer addition in new_height calculation; jbig2_image_resize with potentially under-allocated buffer.
+- Mutation Suggestions: Modify arithmetic operations; change data types; introduce signedness mismatches; adjust loop conditions; vary input validation.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int resize_canvas_buffer(Jbig2Ctx *ctx, Canvas *canvas, int add_width, int add_height) {
+    if (canvas->buffer == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "canvas buffer not initialized");
+        return -1;
+    }
+    
+    int new_width = canvas->width + add_width;
+    int new_height = canvas->height + add_height;
+    
+    if (new_width > MAX_CANVAS_WIDTH || new_height > MAX_CANVAS_HEIGHT) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "requested size exceeds maximum limits");
+        return -1;
+    }
+    
+    // Integer overflow in multiplication
+    size_t new_size = new_width * new_height * sizeof(uint32_t);
+    uint32_t *new_buffer = jbig2_realloc(ctx, canvas->buffer, new_size);
+    if (new_buffer == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to reallocate canvas buffer");
+        return -1;
+    }
+    
+    canvas->buffer = new_buffer;
+    canvas->width = new_width;
+    canvas->height = new_height;
+    
+    return 0;
+}
+```
+
+```c
+int decode_tile_data(Jbig2Ctx *ctx, Tile *tile, uint8_t *data, size_t data_len) {
+    if (tile->decoded != 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "tile already decoded");
+        return 0;
+    }
+    
+    // Integer overflow in stride calculation with signed/unsigned mismatch
+    int stride = tile->width * tile->bpp / 8;
+    size_t required_size = stride * tile->height;
+    
+    if (required_size > data_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "insufficient data for tile");
+        return -1;
+    }
+    
+    tile->buffer = jbig2_alloc(ctx, required_size);
+    if (tile->buffer == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate tile buffer");
+        return -1;
+    }
+    
+    memcpy(tile->buffer, data, required_size);
+    tile->decoded = 1;
+    
+    return 0;
+}
+```
+
+```c
+int compose_pattern_layer(Jbig2Ctx *ctx, PatternLayer *layer, Pattern *pattern, int offset_x, int offset_y) {
+    if (layer->initialized == 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "pattern layer not initialized");
+        return -1;
+    }
+    
+    // Integer overflow with negative offset values
+    int end_x = offset_x + pattern->width;
+    int end_y = offset_y + pattern->height;
+    
+    if (end_x > layer->width || end_y > layer->height) {
+        // Integer overflow in buffer size calculation
+        int new_width = end_x > layer->width ? end_x : layer->width;
+        int new_height = end_y > layer->height ? end_y : layer->height;
+        size_t new_size = new_width * new_height;
+        
+        uint8_t *new_buffer = jbig2_realloc(ctx, layer->buffer, new_size);
+        if (new_buffer == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to resize pattern layer");
+            return -1;
+        }
+        
+        layer->buffer = new_buffer;
+        layer->width = new_width;
+        layer->height = new_height;
+    }
+    
+    // Pattern composition would go here
+    return 0;
+}
+```
+
+```c
+int process_segment_data(Jbig2Ctx *ctx, Segment *seg, uint8_t *input, uint32_t input_len) {
+    if (seg->data_processed) {
+        return 0;
+    }
+    
+    // Integer overflow in size calculation with 32-bit wrap-around
+    uint32_t expanded_size = seg->rle_size * 8;
+    uint32_t total_size = expanded_size + seg->header_size;
+    
+    if (total_size < expanded_size) {  // Check for overflow
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "size calculation overflow");
+        return -1;
+    }
+    
+    // But this check can be bypassed when header_size is large
+    if (total_size > MAX_SEGMENT_SIZE) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "segment too large");
+        return -1;
+    }
+    
+    seg->buffer = jbig2_alloc(ctx, total_size);
+    if (seg->buffer == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate segment buffer");
+        return -1;
+    }
+    
+    // Process and copy data
+    memcpy(seg->buffer, input, input_len < total_size ? input_len : total_size);
+    seg->data_processed = 1;
+    
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int expand_glyph_bitmap(Jbig2Ctx *ctx, GlyphCache *cache, int glyph_id, int add_rows) {
+    if (cache->entries[glyph_id].bitmap == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "glyph %d not cached", glyph_id);
+        return -1;
+    }
+    
+    GlyphEntry *entry = &cache->entries[glyph_id];
+    // Integer overflow in new dimension calculation
+    int new_rows = entry->height + add_rows;
+    
+    if (new_rows > MAX_GLYPH_HEIGHT) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "glyph height %d exceeds limit", new_rows);
+        return -1;
+    }
+    
+    // Overflow in buffer size computation (width * new_rows can wrap)
+    size_t new_size = entry->width * new_rows;
+    uint8_t *new_bitmap = jbig2_realloc(ctx, entry->bitmap, new_size);
+    if (new_bitmap == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to reallocate glyph bitmap");
+        return -1;
+    }
+    
+    entry->bitmap = new_bitmap;
+    entry->height = new_rows;
+    
+    return 0;
+}
+```
+
+```c
+int decode_arithmetic_segment(Jbig2Ctx *ctx, ArithSegment *seg, uint8_t *data, uint32_t len) {
+    if (seg->decoded) {
+        return 0;
+    }
+    
+    // Integer overflow with 16-bit components in 32-bit context
+    uint32_t symbol_count = seg->symbols_high << 16 | seg->symbols_low;
+    uint32_t table_size = symbol_count * sizeof(SymbolEntry);
+    uint32_t total_needed = table_size + seg->context_size;
+    
+    // Overflow check missing for table_size calculation
+    if (total_needed > MAX_SEGMENT_MEMORY) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "segment memory limit exceeded");
+        return -1;
+    }
+    
+    seg->symbol_table = jbig2_alloc(ctx, total_needed);
+    if (seg->symbol_table == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate symbol table");
+        return -1;
+    }
+    
+    // Process data into allocated buffer
+    uint32_t copy_len = len < total_needed ? len : total_needed;
+    memcpy(seg->symbol_table, data, copy_len);
+    seg->decoded = 1;
+    
+    return 0;
+}
+```
+
+```c
+int render_text_region(Jbig2Ctx *ctx, TextRegion *region, int x, int y) {
+    if (region->glyphs == NULL || region->glyph_count == 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "no glyphs to render");
+        return -1;
+    }
+    
+    // Integer overflow in coordinate calculation with large values
+    int render_width = x + region->max_glyph_width * region->glyph_count;
+    int render_height = y + region->max_glyph_height;
+    
+    if (region->canvas->width < render_width || region->canvas->height < render_height) {
+        // New dimensions may overflow individually, but multiplication happens after
+        int new_width = render_width > region->canvas->width ? render_width : region->canvas->width;
+        int new_height = render_height > region->canvas->height ? render_height : region->canvas->height;
+        
+        // Overflow in pixel count calculation
+        size_t new_pixels = new_width * new_height;
+        if (new_pixels / new_width != new_height) { // Check may be optimized out
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "canvas size overflow");
+            return -1;
+        }
+        
+        size_t new_size = new_pixels * region->canvas->bpp / 8;
+        uint8_t *new_buffer = jbig2_realloc(ctx, region->canvas->buffer, new_size);
+        if (new_buffer == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to resize canvas");
+            return -1;
+        }
+        
+        region->canvas->buffer = new_buffer;
+        region->canvas->width = new_width;
+        region->canvas->height = new_height;
+    }
+    
+    return 0;
+}
+```
+
+```c
+int process_huffman_table(Jbig2Ctx *ctx, HuffmanTable *table, uint8_t *codes, uint32_t codes_len) {
+    if (table->processed) {
+        return 0;
+    }
+    
+    // Integer overflow in array allocation with small element size
+    uint32_t total_codes = table->prefix_bits + table->suffix_bits;
+    uint32_t array_size = total_codes * sizeof(HuffmanCode);
+    
+    // Missing overflow check on total_codes calculation
+    if (array_size > MAX_HUFFMAN_TABLE_SIZE) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "huffman table too large");
+        return -1;
+    }
+    
+    table->codes = jbig2_alloc(ctx, array_size);
+    if (table->codes == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate huffman codes");
+        return -1;
+    }
+    
+    // Additional overflow in offset calculation
+    uint32_t data_offset = table->prefix_bits * 4;
+    if (data_offset >= codes_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "invalid code data offset");
+        return -1;
+    }
+    
+    memcpy(table->codes, codes + data_offset, 
+           codes_len - data_offset < array_size ? codes_len - data_offset : array_size);
+    table->processed = 1;
+    
+    return 0;
+}
+```
+

@@ -1,0 +1,222 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 10
+SeedId: unknown
+SeedFile: vul_variant_10.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static void jbig2_set_bits ( byte * line , int x0 , int x1 ) {
+ int a0 , a1 , b0 , b1 , a ;
+ a0 = x0 >> 3 ;
+ a1 = x1 >> 3 ;
+ b0 = x0 & 7 ;
+ b1 = x1 & 7 ;
+ if ( a0 == a1 ) {
+ line [ a0 ] |= lm [ b0 ] & rm [ b1 ] ;
+ }
+ else {
+ line [ a0 ] |= lm [ b0 ] ;
+ for ( a = a0 + 1 ;
+ a < a1 ;
+ a ++ ) line [ a ] = 0xFF ;
+ if ( b1 ) line [ a1 ] |= rm [ b1 ] ;
+ }
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**: Setting bits in a byte array line between positions x0 and x1 inclusive, using precomputed left and right masks.
+- **Vulnerability Type**: Out-of-bounds write.
+- **Vulnerability Trigger**: When x0 or x1 are negative, or when a0, a1, or a exceed the allocated bounds of the line array.
+- **Risky API or Data Flow**: Direct array indexing with user-controlled x0 and x1 without bounds validation.
+- **Mutation Suggestions**: Modify mask logic, change loop conditions, introduce off-by-one errors in loop or index calculations, or alter shift/mask operations.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static void set_pixel_region(byte *framebuffer, int width, int x_start, int x_end, int y) {
+    int byte_start, byte_end, bit_start, bit_end;
+    int row_offset = y * (width / 8);
+    byte *line = &framebuffer[row_offset];
+    
+    byte_start = x_start >> 3;
+    byte_end = x_end >> 3;
+    bit_start = x_start & 7;
+    bit_end = x_end & 7;
+    
+    if (byte_start == byte_end) {
+        line[byte_start] |= (0xFF >> bit_start) & (0xFF << (7 - bit_end));
+    } else {
+        line[byte_start] |= (0xFF >> bit_start);
+        for (int i = byte_start + 1; i < byte_end; i++) {
+            line[i] = 0xFF;
+        }
+        line[byte_end] |= (0xFF << (7 - bit_end));
+    }
+}
+```
+
+```c
+void bitmap_fill_horizontal(byte *bitmap, int stride, int x0, int x1, int y) {
+    int start_byte = x0 / 8;
+    int end_byte = x1 / 8;
+    int start_bit = x0 % 8;
+    int end_bit = x1 % 8;
+    byte *row = bitmap + (y * stride);
+    
+    if (start_byte == end_byte) {
+        byte mask = ((0xFF >> start_bit) & (0xFF << (7 - end_bit)));
+        row[start_byte] |= mask;
+    } else {
+        row[start_byte] |= (0xFF >> start_bit);
+        for (int b = start_byte + 1; b <= end_byte - 1; b++) {
+            row[b] = 0xFF;
+        }
+        row[end_byte] |= (0xFF << (7 - end_bit));
+    }
+}
+```
+
+```c
+static void render_scanline(uint8_t *buffer, int buf_width, int x_left, int x_right, int scanline) {
+    int first_byte_idx = scanline * buf_width + (x_left >> 3);
+    int last_byte_idx = scanline * buf_width + (x_right >> 3);
+    int left_bits = x_left & 0x07;
+    int right_bits = x_right & 0x07;
+    
+    if ((x_left >> 3) == (x_right >> 3)) {
+        buffer[first_byte_idx] |= (~(0xFF << left_bits)) & (0xFF << right_bits);
+    } else {
+        buffer[first_byte_idx] |= ~(0xFF << left_bits);
+        for (int idx = first_byte_idx + 1; idx < last_byte_idx; idx++) {
+            buffer[idx] = 0xFF;
+        }
+        buffer[last_byte_idx] |= (0xFF << right_bits);
+    }
+}
+```
+
+```c
+void draw_hline(unsigned char *canvas, int canvas_width_bytes, int x0, int x1, int y) {
+    int byte_start = x0 >> 3;
+    int byte_end = x1 >> 3;
+    int bit_start = 7 - (x0 & 7);
+    int bit_end = 7 - (x1 & 7);
+    unsigned char *line_start = canvas + y * canvas_width_bytes;
+    
+    if (byte_start == byte_end) {
+        unsigned char mask = ((1 << (bit_start + 1)) - 1) & ~((1 << bit_end) - 1);
+        line_start[byte_start] |= mask;
+    } else {
+        line_start[byte_start] |= ((1 << (bit_start + 1)) - 1);
+        for (int b = byte_start + 1; b < byte_end; b++) {
+            line_start[b] = 0xFF;
+        }
+        line_start[byte_end] |= (0xFF << bit_end);
+    }
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static void fill_bits_in_line(uint8_t *line_buffer, int line_len, int start_pixel, int end_pixel) {
+    int start_byte = start_pixel >> 3;
+    int end_byte = end_pixel >> 3;
+    int start_offset = start_pixel & 7;
+    int end_offset = end_pixel & 7;
+    
+    if (start_byte == end_byte) {
+        uint8_t mask = (0xFF >> start_offset) & (0xFF << (7 - end_offset));
+        line_buffer[start_byte] |= mask;
+    } else {
+        line_buffer[start_byte] |= (0xFF >> start_offset);
+        for (int i = start_byte + 1; i < end_byte; ++i) {
+            line_buffer[i] = 0xFF;
+        }
+        if (end_offset > 0) {
+            line_buffer[end_byte] |= (0xFF << (7 - end_offset));
+        }
+    }
+}
+```
+
+```c
+void bitmap_span_set(unsigned char *bitmap, int stride, int x0, int x1, int row_index) {
+    int byte_idx_l = x0 / 8;
+    int byte_idx_r = x1 / 8;
+    int bit_l = 7 - (x0 % 8);
+    int bit_r = 7 - (x1 % 8);
+    unsigned char *row = bitmap + row_index * stride;
+    
+    if (byte_idx_l == byte_idx_r) {
+        unsigned char mask = ((1 << (bit_l + 1)) - 1) ^ ((1 << bit_r) - 1);
+        row[byte_idx_l] |= mask;
+    } else {
+        row[byte_idx_l] |= ((1 << (bit_l + 1)) - 1);
+        for (int b = byte_idx_l + 1; b < byte_idx_r; ++b) {
+            row[b] = 0xFF;
+        }
+        row[byte_idx_r] |= (0xFF << bit_r);
+    }
+}
+```
+
+```c
+static void set_region_bits(uint8_t *scanline, int width_in_pixels, int left, int right) {
+    int first_byte = left / 8;
+    int last_byte = right / 8;
+    int left_bit = left % 8;
+    int right_bit = right % 8;
+    uint8_t left_mask = 0xFFU >> left_bit;
+    uint8_t right_mask = 0xFFU << (7 - right_bit);
+    
+    if (first_byte == last_byte) {
+        scanline[first_byte] |= (left_mask & right_mask);
+    } else {
+        scanline[first_byte] |= left_mask;
+        int i;
+        for (i = first_byte + 1; i <= last_byte - 1; i++) {
+            scanline[i] = 0xFFU;
+        }
+        scanline[last_byte] |= right_mask;
+    }
+}
+```
+
+```c
+void draw_horizontal_segment(unsigned char *frame, int pitch, int x_start, int x_end, int y_coord) {
+    int start_byte = x_start >> 3;
+    int end_byte = x_end >> 3;
+    int start_shift = x_start & 7;
+    int end_shift = x_end & 7;
+    unsigned char *target_row = frame + (y_coord * pitch);
+    
+    if (start_byte == end_byte) {
+        unsigned char seg_mask = ((0xFF >> start_shift) & (0xFF << (7 - end_shift)));
+        target_row[start_byte] |= seg_mask;
+    } else {
+        target_row[start_byte] |= (0xFF >> start_shift);
+        for (int b = start_byte + 1; b < end_byte; b++) {
+            target_row[b] = 0xFF;
+        }
+        if (end_shift != 0) {
+            target_row[end_byte] |= (0xFF << (7 - end_shift));
+        }
+    }
+}
+```
+

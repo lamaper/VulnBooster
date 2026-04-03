@@ -1,0 +1,145 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 36
+SeedId: unknown
+SeedFile: vul_variant_36.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline void sk_ ## t1 ## _zero ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_zero ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete ( STACK_OF ( t1 ) * sk , int i ) {
+ return ( t2 * ) OPENSSL_sk_delete ( ( OPENSSL_STACK * ) sk , i ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete_ptr ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_delete_ptr ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _push ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_push ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _unshift ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_unshift ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _pop ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_pop ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _shift ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_shift ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char ) DEFINE_SPECIAL_STACK_OF_CONST ( OPENSSL_CSTRING , char ) typedef void * OPENSSL_BLOCK ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_BLOCK , void )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**
+  Inline stack manipulation functions in OpenSSL that perform unchecked type casting and pointer operations, potentially leading to type confusion and memory corruption when used with mismatched or maliciously crafted stack types.
+
+- **Vulnerability Type**
+  Type confusion and unsafe pointer casting due to macro-generated generic stack functions that lack type safety.
+
+- **Vulnerability Trigger**
+  Invoking stack functions (e.g., `sk_*_delete`, `sk_*_pop`, `sk_*_set`) on a stack that contains elements of a different type than expected, or passing incompatible function pointers (like `freefunc` or `copyfunc`) that do not match the actual data type.
+
+- **Risky API or Data Flow**
+  The `OPENSSL_sk_*` internal functions are cast to generic pointer types (`void*`, `const void*`) and back to specific types (`t2*`) without runtime validation. The `DEFINE_SPECIAL_STACK_OF` and `DEFINE_STACK_OF` macros generate functions that assume consistent typing, but this assumption can be violated.
+
+- **Mutation Suggestions**
+  1. Replace `t2*` with a different pointer type in one function within the macro expansion to induce type confusion.
+  2. Modify pointer arithmetic in `OPENSSL_sk_insert` or `OPENSSL_sk_delete` to cause an off-by-one error in stack bounds.
+  3. Introduce a missing NULL check after pointer casting in functions like `sk_*_pop` or `sk_*_shift`.
+  4. Alter the `freefunc` or `copyfunc` signatures to mismatch the expected prototype, leading to callback corruption.
+  5. Change the `idx` parameter in `sk_*_set` or `sk_*_insert` to allow negative or out-of-bounds indexing without validation.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static ossl_inline void *sk_BIO_pop_random(STACK_OF(BIO) *sk) {
+    // Vulnerability: Missing NULL check after pop, and unsafe cast to void* instead of BIO*
+    return (void *)OPENSSL_sk_pop((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline int sk_X509_insert_unchecked(STACK_OF(X509) *sk, X509 *ptr, int idx) {
+    // Vulnerability: No bounds checking on idx; negative values can corrupt stack metadata
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)ptr, idx);
+}
+
+static ossl_inline EVP_PKEY *sk_EVP_PKEY_delete_mismatch(STACK_OF(EVP_PKEY) *sk, int i) {
+    // Vulnerability: Casts to wrong type (EVP_MD* instead of EVP_PKEY*) causing type confusion
+    return (EVP_PKEY *)OPENSSL_sk_delete((OPENSSL_STACK *)sk, i);
+}
+
+static ossl_inline void sk_ASN1_OBJECT_pop_free_mismatch(STACK_OF(ASN1_OBJECT) *sk, void (*freefunc)(void *)) {
+    // Vulnerability: freefunc signature mismatch; expects void(*)(void*) but should be void(*)(ASN1_OBJECT*)
+    OPENSSL_sk_pop_free((OPENSSL_STACK *)sk, (OPENSSL_sk_freefunc)freefunc);
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static ossl_inline int sk_SSL_CIPHER_insert_unchecked(STACK_OF(SSL_CIPHER) *sk, SSL_CIPHER *cipher, int idx) {
+    // Vulnerability: No validation of idx; negative or large positive values corrupt internal stack pointers
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)cipher, idx);
+}
+
+static ossl_inline EVP_MD_CTX *sk_EVP_MD_CTX_delete_mismatch(STACK_OF(EVP_MD_CTX) *sk, int i) {
+    // Vulnerability: Casts result to EVP_MD_CTX* but underlying OPENSSL_sk_delete returns void* from EVP_PKEY* pool
+    return (EVP_MD_CTX *)OPENSSL_sk_delete((OPENSSL_STACK *)sk, i);
+}
+
+static ossl_inline void sk_ASN1_STRING_pop_free_mismatch(STACK_OF(ASN1_STRING) *sk, void (*custom_free)(ASN1_INTEGER *)) {
+    // Vulnerability: Function pointer signature mismatch; custom_free expects ASN1_INTEGER* not ASN1_STRING*
+    OPENSSL_sk_pop_free((OPENSSL_STACK *)sk, (OPENSSL_sk_freefunc)custom_free);
+}
+
+static ossl_inline BIGNUM *sk_BIGNUM_set_no_nullcheck(STACK_OF(BIGNUM) *sk, int idx, BIGNUM *bn) {
+    // Vulnerability: Missing NULL check on 'bn' and no bounds check on idx; setting NULL at valid idx can cause use-after-free
+    return (BIGNUM *)OPENSSL_sk_set((OPENSSL_STACK *)sk, idx, (const void *)bn);
+}
+```
+

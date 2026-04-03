@@ -1,0 +1,17 @@
+{
+  "llm_provider": "openai_compatible",
+  "llm_base_url": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "prompt_mode": "pattern_generate_repair",
+  "prompt_mode_desc": "先抽取漏洞模式，再生成，再做漏洞保持与语法可行性自检重写。",
+  "seed_path": "../data/reveal/reveal_vul_only.json",
+  "seed_count": 2240,
+  "limit": 200,
+  "start_index": 0,
+  "num_variants": 4,
+  "workers": 8,
+  "temperature": 0.9,
+  "top_p": 0.95,
+  "max_output_tokens": 4096,
+  "output_root": "/root/VulnBooster/gvi_causalcode/data/reveal/deepseek_reveal_aug_v2_pgr_l200_n4"
+}

@@ -1,0 +1,253 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 11
+SeedId: unknown
+SeedFile: vul_variant_11.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static int jbig2_find_changing_element ( const byte * line , int x , int w ) {
+ int a , b ;
+ if ( line == 0 ) return w ;
+ if ( x == - 1 ) {
+ a = 0 ;
+ x = 0 ;
+ }
+ else {
+ a = getbit ( line , x ) ;
+ x ++ ;
+ }
+ while ( x < w ) {
+ b = getbit ( line , x ) ;
+ if ( a != b ) break ;
+ x ++ ;
+ }
+ return x ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  - Parsing a binary image line to find the next changing pixel bit position.
+
+- Vulnerability Type
+  - Out-of-bounds read.
+
+- Vulnerability Trigger
+  - When `x` is -1, the function sets `a = 0` and `x = 0`, then proceeds to call `getbit(line, x)` in the while loop without validating if `w` is zero. If `w` is 0, the loop condition `x < w` is false, but the preceding `getbit` call at `b = getbit(line, x)` is not reached. However, the initial call `getbit(line, x)` when `x != -1` may read beyond allocated memory if `line` is too short for index `x`. Additionally, if `w` is less than or equal to `x` after increment, the while loop may not execute, but `getbit` could have been called with an out-of-bounds index earlier.
+
+- Risky API or Data Flow
+  - `getbit(line, x)` assumes `x` is within the bounds of the `line` buffer, but no validation ensures `x <` buffer size.
+
+- Mutation Suggestions
+  - Change loop condition to include buffer length check.
+  - Modify initial `x` increment to skip invalid indices.
+  - Add parameter for buffer size and validate `x` against it.
+  - Alter the `x == -1` case to avoid implicit assumptions about `w`.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int find_next_set_bit(const unsigned char *bitmap, int start, int length) {
+    int current_bit;
+    if (start < 0) {
+        current_bit = 0;
+        start = 0;
+    } else {
+        current_bit = (bitmap[start / 8] >> (start % 8)) & 1;
+        start++;
+    }
+    
+    while (start < length) {
+        int next_bit = (bitmap[start / 8] >> (start % 8)) & 1;
+        if (next_bit != current_bit) {
+            break;
+        }
+        start++;
+    }
+    return start;
+}
+```
+
+```c
+int decode_rle_segment(const uint8_t *data, int offset, int max_len) {
+    int count = 0;
+    int value;
+    
+    if (offset == -1) {
+        value = 0;
+        offset = 0;
+    } else {
+        value = data[offset];
+        offset++;
+    }
+    
+    while (offset < max_len) {
+        if (data[offset] != value) {
+            break;
+        }
+        count++;
+        offset++;
+    }
+    return count;
+}
+```
+
+```c
+static size_t locate_pattern_boundary(const char *buffer, int pos, size_t buf_size) {
+    char prev_char;
+    
+    if (pos < 0) {
+        prev_char = '\0';
+        pos = 0;
+    } else {
+        prev_char = buffer[pos];
+        pos++;
+    }
+    
+    while (pos < buf_size) {
+        if (buffer[pos] != prev_char) {
+            break;
+        }
+        pos++;
+    }
+    
+    // No bounds check when accessing buffer[pos] after loop for comparison
+    if (buffer[pos] == '\n') {
+        return pos;
+    }
+    return buf_size;
+}
+```
+
+```c
+int find_transition_point(const uint16_t *signal, int index, int samples) {
+    uint16_t reference;
+    
+    if (index == -1) {
+        reference = 0;
+        index = 0;
+    } else {
+        reference = signal[index];
+        index++;
+    }
+    
+    while (index < samples) {
+        // Direct array access without validating index against allocated size
+        if (signal[index] > reference + 100) {
+            break;
+        }
+        index++;
+    }
+    return index;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int find_next_set_bit(const unsigned char *bitmap, int start, int length) {
+    int current_bit;
+    if (start < 0) {
+        current_bit = 0;
+        start = 0;
+    } else {
+        current_bit = (bitmap[start / 8] >> (start % 8)) & 1;
+        start++;
+    }
+    
+    while (start < length) {
+        int next_bit = (bitmap[start / 8] >> (start % 8)) & 1;
+        if (next_bit != current_bit) {
+            break;
+        }
+        start++;
+    }
+    return start;
+}
+```
+
+```c
+int decode_rle_segment(const uint8_t *data, int offset, int max_len) {
+    int count = 0;
+    uint8_t value;
+    
+    if (offset == -1) {
+        value = 0;
+        offset = 0;
+    } else {
+        value = data[offset];
+        offset++;
+    }
+    
+    while (offset < max_len) {
+        if (data[offset] != value) {
+            break;
+        }
+        count++;
+        offset++;
+    }
+    return count;
+}
+```
+
+```c
+static size_t locate_pattern_boundary(const char *buffer, int pos, size_t buf_size) {
+    char prev_char;
+    
+    if (pos < 0) {
+        prev_char = '\0';
+        pos = 0;
+    } else {
+        prev_char = buffer[pos];
+        pos++;
+    }
+    
+    while (pos < buf_size) {
+        if (buffer[pos] != prev_char) {
+            break;
+        }
+        pos++;
+    }
+    
+    if (pos < buf_size && buffer[pos] == '\n') {
+        return pos;
+    }
+    return buf_size;
+}
+```
+
+```c
+int find_transition_point(const uint16_t *signal, int index, int samples) {
+    uint16_t reference;
+    
+    if (index == -1) {
+        reference = 0;
+        index = 0;
+    } else {
+        reference = signal[index];
+        index++;
+    }
+    
+    while (index < samples) {
+        if (signal[index] > reference + 100) {
+            break;
+        }
+        index++;
+    }
+    return index;
+}
+```
+

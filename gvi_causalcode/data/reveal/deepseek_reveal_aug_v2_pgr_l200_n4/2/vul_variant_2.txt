@@ -1,0 +1,887 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 2
+SeedId: unknown
+SeedFile: vul_variant_2.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_text_region ( Jbig2Ctx * ctx , Jbig2Segment * segment , const byte * segment_data ) {
+ int offset = 0 ;
+ Jbig2RegionSegmentInfo region_info ;
+ Jbig2TextRegionParams params ;
+ Jbig2Image * image = NULL ;
+ Jbig2SymbolDict * * dicts = NULL ;
+ int n_dicts = 0 ;
+ uint16_t flags = 0 ;
+ uint16_t huffman_flags = 0 ;
+ Jbig2ArithCx * GR_stats = NULL ;
+ int code = 0 ;
+ Jbig2WordStream * ws = NULL ;
+ Jbig2ArithState * as = NULL ;
+ int table_index = 0 ;
+ const Jbig2HuffmanParams * huffman_params = NULL ;
+ if ( segment -> data_length < 17 ) goto too_short ;
+ jbig2_get_region_segment_info ( & region_info , segment_data ) ;
+ offset += 17 ;
+ flags = jbig2_get_uint16 ( segment_data + offset ) ;
+ offset += 2 ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , segment -> number , "text region header flags 0x%04x" , flags ) ;
+ memset ( & params , 0 , sizeof ( Jbig2TextRegionParams ) ) ;
+ params . SBHUFF = flags & 0x0001 ;
+ params . SBREFINE = flags & 0x0002 ;
+ params . LOGSBSTRIPS = ( flags & 0x000c ) >> 2 ;
+ params . SBSTRIPS = 1 << params . LOGSBSTRIPS ;
+ params . REFCORNER = ( Jbig2RefCorner ) ( ( flags & 0x0030 ) >> 4 ) ;
+ params . TRANSPOSED = flags & 0x0040 ;
+ params . SBCOMBOP = ( Jbig2ComposeOp ) ( ( flags & 0x0180 ) >> 7 ) ;
+ params . SBDEFPIXEL = flags & 0x0200 ;
+ params . SBDSOFFSET = ( flags & 0x7C00 ) >> 10 ;
+ if ( params . SBDSOFFSET > 0x0f ) params . SBDSOFFSET -= 0x20 ;
+ params . SBRTEMPLATE = flags & 0x8000 ;
+ if ( params . SBDSOFFSET ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , segment -> number , "text region has SBDSOFFSET %d" , params . SBDSOFFSET ) ;
+ }
+ if ( params . SBHUFF ) {
+ huffman_flags = jbig2_get_uint16 ( segment_data + offset ) ;
+ offset += 2 ;
+ if ( huffman_flags & 0x8000 ) jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "reserved bit 15 of text region huffman flags is not zero" ) ;
+ }
+ else {
+ if ( ( params . SBREFINE ) && ! ( params . SBRTEMPLATE ) ) {
+ params . sbrat [ 0 ] = segment_data [ offset ] ;
+ params . sbrat [ 1 ] = segment_data [ offset + 1 ] ;
+ params . sbrat [ 2 ] = segment_data [ offset + 2 ] ;
+ params . sbrat [ 3 ] = segment_data [ offset + 3 ] ;
+ offset += 4 ;
+ }
+ }
+ params . SBNUMINSTANCES = jbig2_get_uint32 ( segment_data + offset ) ;
+ offset += 4 ;
+ if ( params . SBHUFF ) {
+ switch ( huffman_flags & 0x0003 ) {
+ case 0 : params . SBHUFFFS = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_F ) ;
+ break ;
+ case 1 : params . SBHUFFFS = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_G ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom FS huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFFS = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ case 2 : default : code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region specified invalid FS huffman table" ) ;
+ goto cleanup1 ;
+ break ;
+ }
+ if ( params . SBHUFFFS == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified FS huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x000c ) >> 2 ) {
+ case 0 : params . SBHUFFDS = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_H ) ;
+ break ;
+ case 1 : params . SBHUFFDS = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_I ) ;
+ break ;
+ case 2 : params . SBHUFFDS = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_J ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom DS huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFDS = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ }
+ if ( params . SBHUFFDS == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified DS huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x0030 ) >> 4 ) {
+ case 0 : params . SBHUFFDT = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_K ) ;
+ break ;
+ case 1 : params . SBHUFFDT = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_L ) ;
+ break ;
+ case 2 : params . SBHUFFDT = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_M ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom DT huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFDT = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ }
+ if ( params . SBHUFFDT == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified DT huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x00c0 ) >> 6 ) {
+ case 0 : params . SBHUFFRDW = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_N ) ;
+ break ;
+ case 1 : params . SBHUFFRDW = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_O ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom RDW huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFRDW = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ case 2 : default : code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region specified invalid RDW huffman table" ) ;
+ goto cleanup1 ;
+ break ;
+ }
+ if ( params . SBHUFFRDW == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified RDW huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x0300 ) >> 8 ) {
+ case 0 : params . SBHUFFRDH = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_N ) ;
+ break ;
+ case 1 : params . SBHUFFRDH = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_O ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom RDH huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFRDH = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ case 2 : default : code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region specified invalid RDH huffman table" ) ;
+ goto cleanup1 ;
+ break ;
+ }
+ if ( params . SBHUFFRDH == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified RDH huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x0c00 ) >> 10 ) {
+ case 0 : params . SBHUFFRDX = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_N ) ;
+ break ;
+ case 1 : params . SBHUFFRDX = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_O ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom RDX huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFRDX = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ case 2 : default : code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region specified invalid RDX huffman table" ) ;
+ goto cleanup1 ;
+ break ;
+ }
+ if ( params . SBHUFFRDX == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified RDX huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x3000 ) >> 12 ) {
+ case 0 : params . SBHUFFRDY = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_N ) ;
+ break ;
+ case 1 : params . SBHUFFRDY = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_O ) ;
+ break ;
+ case 3 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom RDY huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFRDY = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ case 2 : default : code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region specified invalid RDY huffman table" ) ;
+ goto cleanup1 ;
+ break ;
+ }
+ if ( params . SBHUFFRDY == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified RDY huffman table" ) ;
+ goto cleanup1 ;
+ }
+ switch ( ( huffman_flags & 0x4000 ) >> 14 ) {
+ case 0 : params . SBHUFFRSIZE = jbig2_build_huffman_table ( ctx , & jbig2_huffman_params_A ) ;
+ break ;
+ case 1 : huffman_params = jbig2_find_table ( ctx , segment , table_index ) ;
+ if ( huffman_params == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Custom RSIZE huffman table not found (%d)" , table_index ) ;
+ goto cleanup1 ;
+ }
+ params . SBHUFFRSIZE = jbig2_build_huffman_table ( ctx , huffman_params ) ;
+ ++ table_index ;
+ break ;
+ }
+ if ( params . SBHUFFRSIZE == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to allocate text region specified RSIZE huffman table" ) ;
+ goto cleanup1 ;
+ }
+ if ( huffman_flags & 0x8000 ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "text region huffman flags bit 15 is set, contrary to spec" ) ;
+ }
+ }
+ jbig2_error ( ctx , JBIG2_SEVERITY_INFO , segment -> number , "text region: %d x %d @ (%d,%d) %d symbols" , region_info . width , region_info . height , region_info . x , region_info . y , params . SBNUMINSTANCES ) ;
+ n_dicts = jbig2_sd_count_referred ( ctx , segment ) ;
+ if ( n_dicts != 0 ) {
+ dicts = jbig2_sd_list_referred ( ctx , segment ) ;
+ }
+ else {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "text region refers to no symbol dictionaries!" ) ;
+ goto cleanup1 ;
+ }
+ if ( dicts == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "unable to retrive symbol dictionaries! previous parsing error?" ) ;
+ goto cleanup1 ;
+ }
+ else {
+ int index ;
+ if ( dicts [ 0 ] == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "unable to find first referenced symbol dictionary!" ) ;
+ goto cleanup1 ;
+ }
+ for ( index = 1 ;
+ index < n_dicts ;
+ index ++ ) if ( dicts [ index ] == NULL ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "unable to find all referenced symbol dictionaries!" ) ;
+ n_dicts = index ;
+ }
+ }
+ {
+ int stats_size = params . SBRTEMPLATE ? 1 << 10 : 1 << 13 ;
+ GR_stats = jbig2_new ( ctx , Jbig2ArithCx , stats_size ) ;
+ if ( GR_stats == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "could not allocate GR_stats" ) ;
+ goto cleanup1 ;
+ }
+ memset ( GR_stats , 0 , stats_size ) ;
+ }
+ image = jbig2_image_new ( ctx , region_info . width , region_info . height ) ;
+ if ( image == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "couldn't allocate text region image" ) ;
+ goto cleanup2 ;
+ }
+ ws = jbig2_word_stream_buf_new ( ctx , segment_data + offset , segment -> data_length - offset ) ;
+ if ( ws == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "couldn't allocate ws in text region image" ) ;
+ goto cleanup2 ;
+ }
+ as = jbig2_arith_new ( ctx , ws ) ;
+ if ( as == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "couldn't allocate as in text region image" ) ;
+ goto cleanup2 ;
+ }
+ if ( ! params . SBHUFF ) {
+ int SBSYMCODELEN , index ;
+ int SBNUMSYMS = 0 ;
+ for ( index = 0 ;
+ index < n_dicts ;
+ index ++ ) {
+ SBNUMSYMS += dicts [ index ] -> n_symbols ;
+ }
+ params . IADT = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IAFS = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IADS = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IAIT = jbig2_arith_int_ctx_new ( ctx ) ;
+ if ( ( params . IADT == NULL ) || ( params . IAFS == NULL ) || ( params . IADS == NULL ) || ( params . IAIT == NULL ) ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "couldn't allocate text region image data" ) ;
+ goto cleanup3 ;
+ }
+ for ( SBSYMCODELEN = 0 ;
+ ( 1 << SBSYMCODELEN ) < SBNUMSYMS ;
+ SBSYMCODELEN ++ ) {
+ }
+ params . IAID = jbig2_arith_iaid_ctx_new ( ctx , SBSYMCODELEN ) ;
+ params . IARI = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IARDW = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IARDH = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IARDX = jbig2_arith_int_ctx_new ( ctx ) ;
+ params . IARDY = jbig2_arith_int_ctx_new ( ctx ) ;
+ if ( ( params . IAID == NULL ) || ( params . IARI == NULL ) || ( params . IARDW == NULL ) || ( params . IARDH == NULL ) || ( params . IARDX == NULL ) || ( params . IARDY == NULL ) ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "couldn't allocate text region image data" ) ;
+ goto cleanup4 ;
+ }
+ }
+ code = jbig2_decode_text_region ( ctx , segment , & params , ( const Jbig2SymbolDict * const * ) dicts , n_dicts , image , segment_data + offset , segment -> data_length - offset , GR_stats , as , ws ) ;
+ if ( code < 0 ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "failed to decode text region image data" ) ;
+ goto cleanup4 ;
+ }
+ if ( ( segment -> flags & 63 ) == 4 ) {
+ segment -> result = jbig2_image_clone ( ctx , image ) ;
+ }
+ else {
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , segment -> number , "composing %dx%d decoded text region onto page at (%d, %d)" , region_info . width , region_info . height , region_info . x , region_info . y ) ;
+ jbig2_page_add_result ( ctx , & ctx -> pages [ ctx -> current_page ] , image , region_info . x , region_info . y , region_info . op ) ;
+ }
+ cleanup4 : if ( ! params . SBHUFF ) {
+ jbig2_arith_iaid_ctx_free ( ctx , params . IAID ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IARI ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IARDW ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IARDH ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IARDX ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IARDY ) ;
+ }
+ cleanup3 : if ( ! params . SBHUFF ) {
+ jbig2_arith_int_ctx_free ( ctx , params . IADT ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IAFS ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IADS ) ;
+ jbig2_arith_int_ctx_free ( ctx , params . IAIT ) ;
+ }
+ jbig2_free ( ctx -> allocator , as ) ;
+ jbig2_word_stream_buf_free ( ctx , ws ) ;
+ cleanup2 : jbig2_free ( ctx -> allocator , GR_stats ) ;
+ jbig2_image_release ( ctx , image ) ;
+ cleanup1 : if ( params . SBHUFF ) {
+ jbig2_release_huffman_table ( ctx , params . SBHUFFFS ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFDS ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFDT ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFRDX ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFRDY ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFRDW ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFRDH ) ;
+ jbig2_release_huffman_table ( ctx , params . SBHUFFRSIZE ) ;
+ }
+ jbig2_free ( ctx -> allocator , dicts ) ;
+ return code ;
+ too_short : return jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Segment too short" ) ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+**Scenario**
+Parsing a JBIG2 text region segment from potentially untrusted input (e.g., a malicious PDF or image file). The function processes segment data containing region information, flags, Huffman table selections, and symbol dictionary references to decode a text region image.
+
+**Vulnerability Type**
+Integer overflow leading to heap buffer overflow.
+
+**Vulnerability Trigger**
+When `params.SBNUMINSTANCES` is set to a very large value via `jbig2_get_uint32(segment_data + offset)`, the subsequent loop in `jbig2_decode_text_region` (called later) may process an excessive number of symbol instances. This can cause an integer overflow in the calculation of the total number of symbols (`SBNUMSYMS`) or in internal allocations/offsets, leading to out-of-bounds memory writes in the `GR_stats` array or image buffer.
+
+**Risky API or Data Flow**
+- `jbig2_get_uint32(segment_data + offset)` without validation of `SBNUMINSTANCES`.
+- `stats_size = params.SBRTEMPLATE ? 1 << 10 : 1 << 13;` followed by `GR_stats = jbig2_new(ctx, Jbig2ArithCx, stats_size);` — fixed size may be insufficient for a maliciously large number of instances.
+- `jbig2_decode_text_region` internally uses `SBNUMINSTANCES` without bounds checks, potentially overflowing arithmetic in context allocations or symbol index calculations.
+
+**Mutation Suggestions**
+- Modify the `SBNUMINSTANCES` field to an extremely large value (e.g., near `UINT32_MAX`).
+- Adjust `flags` to select non-Huffman (arithmetic) coding, forcing the path that calculates `SBSYMCODELEN` and allocates multiple arithmetic contexts.
+- Tamper with `n_dicts` and `dicts` entries to point to malformed or empty symbol dictionaries, causing `SBNUMSYMS` to be miscalculated.
+- Corrupt the `segment_data` length to cause `offset` to exceed `segment->data_length` during parsing of Huffman table data or refinement AT pixels.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int parse_glyph_run(GlyphContext *ctx, const uint8_t *data, size_t data_len) {
+    if (data_len < 8) return ERR_TOO_SHORT;
+    
+    uint32_t num_glyphs = read_u32(data);
+    uint16_t flags = read_u16(data + 4);
+    uint16_t contour_count = read_u16(data + 6);
+    size_t offset = 8;
+    
+    GlyphInfo *glyphs = malloc(sizeof(GlyphInfo) * num_glyphs);
+    if (!glyphs) return ERR_ALLOC;
+    
+    // Fixed-size statistics buffer for arithmetic decoding
+    int stats_size = (flags & 0x01) ? 512 : 1024;
+    ArithState *arith_stats = malloc(sizeof(ArithState) * stats_size);
+    if (!arith_stats) {
+        free(glyphs);
+        return ERR_ALLOC;
+    }
+    memset(arith_stats, 0, sizeof(ArithState) * stats_size);
+    
+    // Process each glyph
+    for (uint32_t i = 0; i < num_glyphs; i++) {
+        if (offset + 4 > data_len) {
+            free(glyphs);
+            free(arith_stats);
+            return ERR_CORRUPT;
+        }
+        
+        glyphs[i].advance = read_u16(data + offset);
+        glyphs[i].offset = read_u16(data + offset + 2);
+        offset += 4;
+        
+        // Decode contour data using arithmetic context
+        int contour_idx = i % stats_size;
+        if (decode_contour(ctx, &glyphs[i], arith_stats + contour_idx, data, &offset, data_len) < 0) {
+            free(glyphs);
+            free(arith_stats);
+            return ERR_DECODE;
+        }
+    }
+    
+    // Use glyphs for rendering...
+    render_glyph_run(ctx, glyphs, num_glyphs);
+    
+    free(glyphs);
+    free(arith_stats);
+    return SUCCESS;
+}
+```
+
+```c
+int decode_vector_layer(DecodeContext *dc, const uint8_t *layer_data, uint32_t layer_len) {
+    if (layer_len < 16) return DECODE_TOO_SHORT;
+    
+    VectorLayerHeader hdr;
+    memcpy(&hdr, layer_data, sizeof(hdr));
+    uint32_t offset = sizeof(hdr);
+    
+    // Validate basic header fields
+    if (hdr.version != 0x100) return DECODE_UNSUPPORTED;
+    if (hdr.num_paths == 0) return DECODE_EMPTY;
+    
+    // Allocate path array
+    PathRecord *paths = malloc(sizeof(PathRecord) * hdr.num_paths);
+    if (!paths) return DECODE_NOMEM;
+    
+    // Fixed-size decoding context pool
+    uint32_t ctx_pool_size = 256;
+    PathDecodeCtx *decode_ctx = malloc(sizeof(PathDecodeCtx) * ctx_pool_size);
+    if (!decode_ctx) {
+        free(paths);
+        return DECODE_NOMEM;
+    }
+    memset(decode_ctx, 0, sizeof(PathDecodeCtx) * ctx_pool_size);
+    
+    // Process each path
+    for (uint32_t i = 0; i < hdr.num_paths; i++) {
+        if (offset + 8 > layer_len) {
+            free(paths);
+            free(decode_ctx);
+            return DECODE_CORRUPT;
+        }
+        
+        paths[i].type = layer_data[offset];
+        paths[i].point_count = read_u16(layer_data + offset + 1);
+        paths[i].flags = read_u32(layer_data + offset + 3);
+        offset += 7;
+        
+        // Decode points using arithmetic coding context
+        uint32_t ctx_idx = i % ctx_pool_size;
+        if (decode_path_points(dc, &paths[i], &decode_ctx[ctx_idx], 
+                               layer_data, &offset, layer_len) < 0) {
+            free(paths);
+            free(decode_ctx);
+            return DECODE_PATH_FAIL;
+        }
+        
+        // Integer overflow in total point calculation
+        if (UINT32_MAX - paths[i].point_count < hdr.total_points) {
+            hdr.total_points = UINT32_MAX; // Overflow
+        } else {
+            hdr.total_points += paths[i].point_count;
+        }
+    }
+    
+    // Render layer with potentially overflowed total_points
+    render_vector_layer(dc, paths, hdr.num_paths, hdr.total_points);
+    
+    free(paths);
+    free(decode_ctx);
+    return DECODE_SUCCESS;
+}
+```
+
+```c
+int process_tile_data(TileProcessor *tp, const uint8_t *tile_buf, size_t buf_len) {
+    if (buf_len < 12) return TILE_ERR_SHORT;
+    
+    TileHeader header;
+    header.tile_id = read_u32(tile_buf);
+    header.num_symbols = read_u32(tile_buf + 4);
+    header.compression = tile_buf[8];
+    header.reserved = tile_buf[9];
+    header.symbol_bits = read_u16(tile_buf + 10);
+    
+    size_t offset = 12;
+    
+    // Allocate symbol buffer
+    uint32_t *symbols = malloc(sizeof(uint32_t) * header.num_symbols);
+    if (!symbols) return TILE_ERR_MEMORY;
+    
+    // Fixed-size arithmetic model
+    int model_size = 1 << 10; // 1024 entries
+    ArithModel *model = malloc(sizeof(ArithModel) * model_size);
+    if (!model) {
+        free(symbols);
+        return TILE_ERR_MEMORY;
+    }
+    init_arith_model(model, model_size);
+    
+    // Decode symbols
+    for (uint32_t i = 0; i < header.num_symbols; i++) {
+        if (offset >= buf_len) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_CORRUPT;
+        }
+        
+        // Use arithmetic decoding with wrap-around context index
+        int ctx_idx = i & (model_size - 1);
+        uint32_t symbol;
+        if (arith_decode_symbol(&tile_buf[offset], buf_len - offset, 
+                                &model[ctx_idx], &symbol) < 0) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_DECODE;
+        }
+        
+        symbols[i] = symbol;
+        offset += (header.symbol_bits + 7) / 8;
+        
+        // Overflow in offset calculation for large symbol_bits
+        if (offset > buf_len) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_CORRUPT;
+        }
+    }
+    
+    // Process symbols - potential integer overflow in total size
+    uint32_t total_size = header.num_symbols * sizeof(uint32_t);
+    if (total_size / sizeof(uint32_t) != header.num_symbols) {
+        // Overflow occurred
+        free(symbols);
+        free(model);
+        return TILE_ERR_OVERFLOW;
+    }
+    
+    render_tile_symbols(tp, symbols, header.num_symbols);
+    
+    free(symbols);
+    free(model);
+    return TILE_SUCCESS;
+}
+```
+
+```c
+int decode_pattern_fill(PatternDecoder *pd, const uint8_t *data, uint32_t data_len) {
+    if (data_len < 20) return PATTERN_ERR_SHORT;
+    
+    PatternHeader ph;
+    ph.pattern_type = data[0];
+    ph.cell_width = read_u16(data + 1);
+    ph.cell_height = read_u16(data + 3);
+    ph.num_cells = read_u32(data + 5);
+    ph.flags = read_u16(data + 9);
+    ph.reserved = read_u16(data + 11);
+    ph.total_instances = read_u32(data + 13);
+    
+    uint32_t offset = 17;
+    
+    // Allocate cell array
+    PatternCell *cells = malloc(sizeof(PatternCell) * ph.num_cells);
+    if (!cells) return PATTERN_ERR_MEMORY;
+    
+    // Fixed-size decoding context
+    uint32_t ctx_array_size = 2048;
+    PatternContext *ctx_array = malloc(sizeof(PatternContext) * ctx_array_size);
+    if (!ctx_array) {
+        free(cells);
+        return PATTERN_ERR_MEMORY;
+    }
+    memset(ctx_array, 0, sizeof(PatternContext) * ctx_array_size);
+    
+    // Decode each cell
+    for (uint32_t i = 0; i < ph.num_cells; i++) {
+        if (offset + 8 > data_len) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_CORRUPT;
+        }
+        
+        cells[i].x_offset = read_u16(data + offset);
+        cells[i].y_offset = read_u16(data + offset + 2);
+        cells[i].instance_count = read_u32(data + offset + 4);
+        offset += 8;
+        
+        // Decode instances using arithmetic context
+        uint32_t ctx_idx = (i * cells[i].instance_count) % ctx_array_size;
+        if (decode_cell_instances(pd, &cells[i], &ctx_array[ctx_idx],
+                                  data, &offset, data_len) < 0) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_DECODE;
+        }
+        
+        // Integer overflow in total instance validation
+        if (ph.total_instances > UINT32_MAX - cells[i].instance_count) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_OVERFLOW;
+        }
+    }
+    
+    // Render pattern with potentially malicious instance counts
+    render_pattern_fill(pd, cells, ph.num_cells, ph.total_instances);
+    
+    free(cells);
+    free(ctx_array);
+    return PATTERN_SUCCESS;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int parse_glyph_run(GlyphContext *ctx, const uint8_t *data, size_t data_len) {
+    if (data_len < 8) return ERR_TOO_SHORT;
+    
+    uint32_t num_glyphs = read_u32(data);
+    uint16_t flags = read_u16(data + 4);
+    uint16_t contour_count = read_u16(data + 6);
+    size_t offset = 8;
+    
+    if (num_glyphs > 0xFFFFF) {
+        log_warning(ctx, "excessive glyph count: %u", num_glyphs);
+    }
+    
+    GlyphInfo *glyphs = malloc(sizeof(GlyphInfo) * num_glyphs);
+    if (!glyphs) return ERR_ALLOC;
+    
+    int stats_size = (flags & 0x01) ? 512 : 1024;
+    ArithState *arith_stats = malloc(sizeof(ArithState) * stats_size);
+    if (!arith_stats) {
+        free(glyphs);
+        return ERR_ALLOC;
+    }
+    memset(arith_stats, 0, sizeof(ArithState) * stats_size);
+    
+    for (uint32_t i = 0; i < num_glyphs; i++) {
+        if (offset + 4 > data_len) {
+            free(glyphs);
+            free(arith_stats);
+            return ERR_CORRUPT;
+        }
+        
+        glyphs[i].advance = read_u16(data + offset);
+        glyphs[i].offset = read_u16(data + offset + 2);
+        offset += 4;
+        
+        int contour_idx = i % stats_size;
+        if (decode_contour(ctx, &glyphs[i], arith_stats + contour_idx, 
+                          data, &offset, data_len) < 0) {
+            free(glyphs);
+            free(arith_stats);
+            return ERR_DECODE;
+        }
+    }
+    
+    render_glyph_run(ctx, glyphs, num_glyphs);
+    
+    free(glyphs);
+    free(arith_stats);
+    return SUCCESS;
+}
+```
+
+```c
+int decode_vector_layer(DecodeContext *dc, const uint8_t *layer_data, uint32_t layer_len) {
+    if (layer_len < 16) return DECODE_TOO_SHORT;
+    
+    VectorLayerHeader hdr;
+    memcpy(&hdr, layer_data, sizeof(hdr));
+    uint32_t offset = sizeof(hdr);
+    
+    if (hdr.version != 0x100) return DECODE_UNSUPPORTED;
+    if (hdr.num_paths == 0) return DECODE_EMPTY;
+    
+    PathRecord *paths = malloc(sizeof(PathRecord) * hdr.num_paths);
+    if (!paths) return DECODE_NOMEM;
+    
+    uint32_t ctx_pool_size = 256;
+    PathDecodeCtx *decode_ctx = malloc(sizeof(PathDecodeCtx) * ctx_pool_size);
+    if (!decode_ctx) {
+        free(paths);
+        return DECODE_NOMEM;
+    }
+    memset(decode_ctx, 0, sizeof(PathDecodeCtx) * ctx_pool_size);
+    
+    for (uint32_t i = 0; i < hdr.num_paths; i++) {
+        if (offset + 7 > layer_len) {
+            free(paths);
+            free(decode_ctx);
+            return DECODE_CORRUPT;
+        }
+        
+        paths[i].type = layer_data[offset];
+        paths[i].point_count = read_u16(layer_data + offset + 1);
+        paths[i].flags = read_u32(layer_data + offset + 3);
+        offset += 7;
+        
+        uint32_t ctx_idx = i % ctx_pool_size;
+        if (decode_path_points(dc, &paths[i], &decode_ctx[ctx_idx], 
+                               layer_data, &offset, layer_len) < 0) {
+            free(paths);
+            free(decode_ctx);
+            return DECODE_PATH_FAIL;
+        }
+        
+        if (UINT32_MAX - paths[i].point_count < hdr.total_points) {
+            hdr.total_points = UINT32_MAX;
+        } else {
+            hdr.total_points += paths[i].point_count;
+        }
+    }
+    
+    render_vector_layer(dc, paths, hdr.num_paths, hdr.total_points);
+    
+    free(paths);
+    free(decode_ctx);
+    return DECODE_SUCCESS;
+}
+```
+
+```c
+int process_tile_data(TileProcessor *tp, const uint8_t *tile_buf, size_t buf_len) {
+    if (buf_len < 12) return TILE_ERR_SHORT;
+    
+    TileHeader header;
+    header.tile_id = read_u32(tile_buf);
+    header.num_symbols = read_u32(tile_buf + 4);
+    header.compression = tile_buf[8];
+    header.reserved = tile_buf[9];
+    header.symbol_bits = read_u16(tile_buf + 10);
+    
+    size_t offset = 12;
+    
+    if (header.num_symbols > 0xFFFFFF) {
+        log_warning(tp, "large symbol count: %u", header.num_symbols);
+    }
+    
+    uint32_t *symbols = malloc(sizeof(uint32_t) * header.num_symbols);
+    if (!symbols) return TILE_ERR_MEMORY;
+    
+    int model_size = 1 << 10;
+    ArithModel *model = malloc(sizeof(ArithModel) * model_size);
+    if (!model) {
+        free(symbols);
+        return TILE_ERR_MEMORY;
+    }
+    init_arith_model(model, model_size);
+    
+    for (uint32_t i = 0; i < header.num_symbols; i++) {
+        if (offset >= buf_len) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_CORRUPT;
+        }
+        
+        int ctx_idx = i & (model_size - 1);
+        uint32_t symbol;
+        if (arith_decode_symbol(&tile_buf[offset], buf_len - offset, 
+                                &model[ctx_idx], &symbol) < 0) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_DECODE;
+        }
+        
+        symbols[i] = symbol;
+        offset += (header.symbol_bits + 7) / 8;
+        
+        if (offset > buf_len) {
+            free(symbols);
+            free(model);
+            return TILE_ERR_CORRUPT;
+        }
+    }
+    
+    uint32_t total_size = header.num_symbols * sizeof(uint32_t);
+    if (total_size / sizeof(uint32_t) != header.num_symbols) {
+        free(symbols);
+        free(model);
+        return TILE_ERR_OVERFLOW;
+    }
+    
+    render_tile_symbols(tp, symbols, header.num_symbols);
+    
+    free(symbols);
+    free(model);
+    return TILE_SUCCESS;
+}
+```
+
+```c
+int decode_pattern_fill(PatternDecoder *pd, const uint8_t *data, uint32_t data_len) {
+    if (data_len < 20) return PATTERN_ERR_SHORT;
+    
+    PatternHeader ph;
+    ph.pattern_type = data[0];
+    ph.cell_width = read_u16(data + 1);
+    ph.cell_height = read_u16(data + 3);
+    ph.num_cells = read_u32(data + 5);
+    ph.flags = read_u16(data + 9);
+    ph.reserved = read_u16(data + 11);
+    ph.total_instances = read_u32(data + 13);
+    
+    uint32_t offset = 17;
+    
+    if (ph.num_cells > 0xFFFF) {
+        log_warning(pd, "large cell count: %u", ph.num_cells);
+    }
+    
+    PatternCell *cells = malloc(sizeof(PatternCell) * ph.num_cells);
+    if (!cells) return PATTERN_ERR_MEMORY;
+    
+    uint32_t ctx_array_size = 2048;
+    PatternContext *ctx_array = malloc(sizeof(PatternContext) * ctx_array_size);
+    if (!ctx_array) {
+        free(cells);
+        return PATTERN_ERR_MEMORY;
+    }
+    memset(ctx_array, 0, sizeof(PatternContext) * ctx_array_size);
+    
+    for (uint32_t i = 0; i < ph.num_cells; i++) {
+        if (offset + 8 > data_len) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_CORRUPT;
+        }
+        
+        cells[i].x_offset = read_u16(data + offset);
+        cells[i].y_offset = read_u16(data + offset + 2);
+        cells[i].instance_count = read_u32(data + offset + 4);
+        offset += 8;
+        
+        uint32_t ctx_idx = (i * cells[i].instance_count) % ctx_array_size;
+        if (decode_cell_instances(pd, &cells[i], &ctx_array[ctx_idx],
+                                  data, &offset, data_len) < 0) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_DECODE;
+        }
+        
+        if (ph.total_instances > UINT32_MAX - cells[i].instance_count) {
+            free(cells);
+            free(ctx_array);
+            return PATTERN_ERR_OVERFLOW;
+        }
+    }
+    
+    render_pattern_fill(pd, cells, ph.num_cells, ph.total_instances);
+    
+    free(cells);
+    free(ctx_array);
+    return PATTERN_SUCCESS;
+}
+```
+

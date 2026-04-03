@@ -1,0 +1,277 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 18
+SeedId: unknown
+SeedFile: vul_variant_18.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+unsigned long # define BN_BYTES 8 # endif # ifdef SIXTY_FOUR_BIT # define BN_ULONG unsigned long long # define BN_BYTES 8 # endif # ifdef THIRTY_TWO_BIT # define BN_ULONG unsigned int # define BN_BYTES 4 # endif # define BN_BITS2 ( BN_BYTES * 8 ) # define BN_BITS ( BN_BITS2 * 2 ) # define BN_TBIT ( ( BN_ULONG ) 1 << ( BN_BITS2 - 1 ) ) # define BN_FLG_MALLOCED 0x01 # define BN_FLG_STATIC_DATA 0x02 # define BN_FLG_CONSTTIME 0x04 # define BN_FLG_SECURE 0x08 # if OPENSSL_API_COMPAT < 0x00908000L # define BN_FLG_EXP_CONSTTIME BN_FLG_CONSTTIME # define BN_FLG_FREE 0x8000 # endif void BN_set_flags ( BIGNUM * b , int n ) ;
+ int BN_get_flags ( const BIGNUM * b , int n ) ;
+ # define BN_RAND_TOP_ANY - 1 # define BN_RAND_TOP_ONE 0 # define BN_RAND_TOP_TWO 1 # define BN_RAND_BOTTOM_ANY 0 # define BN_RAND_BOTTOM_ODD 1 void BN_with_flags ( BIGNUM * dest , const BIGNUM * b , int flags ) ;
+ int BN_GENCB_call ( BN_GENCB * cb , int a , int b ) ;
+ BN_GENCB * BN_GENCB_new ( void ) ;
+ void BN_GENCB_free ( BN_GENCB * cb ) ;
+ void BN_GENCB_set_old ( BN_GENCB * gencb , void ( * callback ) ( int , int , void * ) , void * cb_arg ) ;
+ void BN_GENCB_set ( BN_GENCB * gencb , int ( * callback ) ( int , int , BN_GENCB * ) , void * cb_arg ) ;
+ void * BN_GENCB_get_arg ( BN_GENCB * cb ) ;
+ # define BN_prime_checks 0 # define BN_prime_checks_for_size ( b ) ( ( b ) >= 3747 ? 3 : ( b ) >= 1345 ? 4 : ( b ) >= 476 ? 5 : ( b ) >= 400 ? 6 : ( b ) >= 347 ? 7 : ( b ) >= 308 ? 8 : ( b ) >= 55 ? 27 : 34 ) # define BN_num_bytes ( a ) ( ( BN_num_bits ( a ) + 7 ) / 8 ) int BN_abs_is_word ( const BIGNUM * a , const BN_ULONG w ) ;
+ int BN_is_zero ( const BIGNUM * a ) ;
+ int BN_is_one ( const BIGNUM * a ) ;
+ int BN_is_word ( const BIGNUM * a , const BN_ULONG w ) ;
+ int BN_is_odd ( const BIGNUM * a ) ;
+ # define BN_one ( a ) ( BN_set_word ( ( a ) , 1 ) ) void BN_zero_ex ( BIGNUM * a ) ;
+ # if OPENSSL_API_COMPAT >= 0x00908000L # define BN_zero ( a ) BN_zero_ex ( a ) # else # define BN_zero ( a ) ( BN_set_word ( ( a ) , 0 ) ) # endif const BIGNUM * BN_value_one ( void ) ;
+ char * BN_options ( void ) ;
+ BN_CTX * BN_CTX_new ( void ) ;
+ BN_CTX * BN_CTX_secure_new ( void ) ;
+ void BN_CTX_free ( BN_CTX * c ) ;
+ void BN_CTX_start ( BN_CTX * ctx ) ;
+ BIGNUM * BN_CTX_get ( BN_CTX * ctx ) ;
+ void BN_CTX_end ( BN_CTX * ctx ) ;
+ int BN_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_priv_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_priv_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_pseudo_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_pseudo_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_num_bits ( const BIGNUM * a ) ;
+ int BN_num_bits_word ( BN_ULONG l ) ;
+ int BN_security_bits ( int L , int N ) ;
+ BIGNUM * BN_new ( void ) ;
+ BIGNUM * BN_secure_new ( void ) ;
+ void BN_clear_free ( BIGNUM * a ) ;
+ BIGNUM * BN_copy ( BIGNUM * a , const BIGNUM * b ) ;
+ void BN_swap ( BIGNUM * a , BIGNUM * b ) ;
+ BIGNUM * BN_bin2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2bin ( const BIGNUM * a , unsigned char * to ) ;
+ int BN_bn2binpad ( const BIGNUM * a , unsigned char * to , int tolen ) ;
+ BIGNUM * BN_lebin2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2lebinpad ( const BIGNUM * a , unsigned char * to , int tolen ) ;
+ BIGNUM * BN_mpi2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2mpi ( const BIGNUM * a , unsigned char * to ) ;
+ int BN_sub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_usub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_uadd ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_add ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_mul ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , BN_CTX * ctx ) ;
+ int BN_sqr ( BIGNUM * r , const BIGNUM * a , BN_CTX * ctx ) ;
+ void BN_set_negative ( BIGNUM * b , int n ) ;
+ int BN_is_negative ( const BIGNUM * b ) ;
+ int BN_div ( BIGNUM * dv , BIGNUM * rem , const BIGNUM * m , const BIGNUM * d , BN_CTX * ctx ) ;
+ # define BN_mod ( rem , m , d , ctx ) BN_div ( NULL , ( rem ) , ( m ) , ( d ) , ( ctx ) ) int BN_nnmod ( BIGNUM * r , const BIGNUM * m , const BIGNUM * d , BN_CTX * ctx ) ;
+ int BN_mod_add ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_add_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m ) ;
+ int BN_mod_sub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_sub_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m ) ;
+ int BN_mod_mul ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_sqr ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift1 ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift1_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m ) ;
+ int BN_mod_lshift ( BIGNUM * r , const BIGNUM * a , int n , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift_quick ( BIGNUM * r , const BIGNUM * a , int n , const BIGNUM * m ) ;
+ BN_ULONG BN_mod_word ( const BIGNUM * a , BN_ULONG w ) ;
+ BN_ULONG BN_div_word ( BIGNUM * a , BN_ULONG w ) ;
+ int BN_mul_word ( BIGNUM * a , BN_ULONG w ) ;
+ int BN_add_word ( BIGNUM * a , BN_ULONG w ) ;
+ int BN_sub_word ( BIGNUM * a , BN_ULONG w ) ;
+ int BN_set_word ( BIGNUM * a , BN_ULONG w ) ;
+ BN_ULONG BN_get_word ( const BIGNUM * a )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  A function `BN_get_word` attempts to retrieve the numeric value of a BIGNUM object as a single machine word (BN_ULONG). This is inherently risky because BIGNUM can represent numbers larger than what fits in a single word.
+
+- Vulnerability Type
+  Integer overflow or truncation leading to incorrect value retrieval, or potential use of uninitialized data if the BIGNUM is not properly set.
+
+- Vulnerability Trigger
+  Calling `BN_get_word` on a BIGNUM whose value exceeds the maximum representable value in a BN_ULONG (e.g., larger than 2^32-1 or 2^64-1 depending on platform). The function may truncate the higher bits without indication, returning a misleading value.
+
+- Risky API or Data Flow
+  The function `BN_get_word` directly accesses the internal representation of BIGNUM (likely `a->d[0]`) without checking if the number fits within one limb. If `a->top` (number of used limbs) is greater than 1, the return value is incomplete.
+
+- Mutation Suggestions
+  Modify the function to handle multi-limb BIGNUMs incorrectly, e.g., by always returning the first limb regardless of sign or size, or by adding an overflow check that can be bypassed. Introduce off-by-one errors in limb indexing, or mishandle negative numbers.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+#include <openssl/bn.h>
+#include <string.h>
+
+/* Vulnerability: Integer truncation without overflow indication.
+   Returns the least significant word of a BIGNUM, ignoring higher words.
+   If the BIGNUM is negative, returns the absolute value's first word,
+   losing sign information and potentially causing misinterpretation. */
+BN_ULONG BN_get_word_truncate(const BIGNUM *a) {
+    if (a == NULL || BN_is_zero(a))
+        return 0;
+    /* Directly return the first limb without checking if number fits */
+    return a->d[0];
+}
+```
+
+```c
+#include <openssl/bn.h>
+#include <limits.h>
+
+/* Vulnerability: Incorrect overflow check due to off-by-one error.
+   Attempts to check if the BIGNUM fits in a BN_ULONG, but the condition
+   incorrectly allows one extra limb, leading to silent truncation. */
+BN_ULONG BN_get_word_unsafe(const BIGNUM *a) {
+    if (a == NULL || a->top == 0)
+        return 0;
+    /* Off-by-one: should be a->top > 1, but here allows top == 2 */
+    if (a->top > 2) {
+        /* Error handling omitted; in practice might return 0 or partial value */
+        return a->d[0];
+    }
+    /* If negative, return absolute value without proper sign handling */
+    BN_ULONG val = a->d[0];
+    if (BN_is_negative(a) && val != 0)
+        val = -val;
+    return val;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+/* Vulnerability: Mishandles multi-limb BIGNUM by summing all limbs without carry,
+   causing integer overflow within the BN_ULONG return type and producing
+   a corrupted value that bears no relation to the actual number. */
+BN_ULONG BN_get_word_sum_overflow(const BIGNUM *a) {
+    if (a == NULL || a->top == 0)
+        return 0;
+    BN_ULONG sum = 0;
+    int i;
+    /* Sum all limbs directly without considering limb positions (base 2^BN_BITS2) */
+    for (i = 0; i < a->top; i++) {
+        sum += a->d[i]; /* Overflow can occur here */
+    }
+    /* Ignore sign entirely */
+    return sum;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+/* Vulnerability: Uses uninitialized data when BIGNUM is improperly constructed.
+   Assumes the BIGNUM's 'd' array is always allocated, but if a->top is positive
+   while a->d is NULL or points to freed memory, this reads from invalid address. */
+BN_ULONG BN_get_word_no_validation(const BIGNUM *a) {
+    /* No NULL check for a */
+    if (a->top == 0)
+        return 0;
+    /* Direct access without verifying a->d is valid */
+    BN_ULONG val = a->d[0];
+    /* If a->d was freed, this dereferences a dangling pointer */
+    if (BN_is_negative(a)) {
+        /* Incorrect sign handling: returns two's complement without proper width */
+        val = ~val + 1;
+    }
+    return val;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+#include <openssl/bn.h>
+
+/* Vulnerability: Truncation of multi-limb BIGNUM to single word without overflow indication.
+   Returns the absolute value of the least significant limb, discarding sign and higher limbs.
+   Callers may misinterpret the result as the full numeric value. */
+BN_ULONG BN_extract_limb(const BIGNUM *bn) {
+    if (bn == NULL || bn->top == 0)
+        return 0;
+    /* Direct limb access without checking if number fits in one word */
+    BN_ULONG limb = bn->d[0];
+    /* Strip sign incorrectly: returns absolute value of first limb */
+    if (BN_is_negative(bn))
+        limb = -limb;
+    return limb;
+}
+```
+
+```c
+#include <openssl/bn.h>
+#include <limits.h>
+
+/* Vulnerability: Off-by-one in overflow check allows two-limb numbers to be truncated.
+   The condition incorrectly permits a->top == 2, causing silent loss of high limb
+   for numbers between 2^BN_BITS2 and 2^(2*BN_BITS2)-1. */
+BN_ULONG BN_compress_word(const BIGNUM *a) {
+    if (a == NULL || a->top == 0)
+        return 0;
+    /* Faulty overflow check: should reject a->top > 1 */
+    if (a->top > 2) {
+        /* Logically should error, but returns truncated value anyway */
+        return a->d[0];
+    }
+    BN_ULONG val = a->d[0];
+    /* If second limb exists, it is ignored due to off-by-one condition */
+    if (a->top == 2) {
+        /* Incorrectly attempt to incorporate high limb via shift that overflows */
+        val |= (a->d[1] << (BN_BITS2 / 2));
+    }
+    return val;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+/* Vulnerability: Integer overflow in accumulated shift when constructing word
+   from multiple limbs. The shift amount exceeds BN_ULONG width for i > 0,
+   causing undefined behavior and corrupt results. */
+BN_ULONG BN_folded_word(const BIGNUM *num) {
+    if (num == NULL || num->top == 0)
+        return 0;
+    BN_ULONG result = 0;
+    int i;
+    for (i = 0; i < num->top; i++) {
+        /* Shift overflow: when i >= 2, shift >= 2*BN_BITS2 > BN_ULONG bits */
+        result |= (num->d[i] << (i * BN_BITS2));
+    }
+    /* Sign ignored entirely */
+    return result;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+/* Vulnerability: Reads from potentially uninitialized or freed limb array
+   when BIGNUM flags indicate static data but d pointer is invalid.
+   Also mishandles negative zero case. */
+BN_ULONG BN_raw_limb(const BIGNUM *b) {
+    /* Missing NULL check for b */
+    if (b->top <= 0)
+        return 0;
+    /* Assume d is always valid, but BN_FLG_STATIC_DATA may point to expired buffer */
+    BN_ULONG limb = b->d[0];
+    /* Incorrect sign handling for negative numbers: returns raw limb without sign adjustment */
+    if (BN_is_negative(b)) {
+        /* Two's complement conversion assumes single-limb width, corrupting multi-limb values */
+        limb = ~limb + 1;
+    }
+    return limb;
+}
+```
+

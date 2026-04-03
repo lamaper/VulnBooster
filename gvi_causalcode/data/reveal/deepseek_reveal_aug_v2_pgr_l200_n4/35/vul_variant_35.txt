@@ -1,0 +1,262 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 35
+SeedId: unknown
+SeedFile: vul_variant_35.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline t2 * sk_ ## t1 ## _delete ( STACK_OF ( t1 ) * sk , int i ) {
+ return ( t2 * ) OPENSSL_sk_delete ( ( OPENSSL_STACK * ) sk , i ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete_ptr ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_delete_ptr ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _push ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_push ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _unshift ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_unshift ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _pop ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_pop ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _shift ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_shift ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char ) DEFINE_SPECIAL_STACK_OF_CONST ( OPENSSL_CSTRING , char )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**
+  Inline stack manipulation functions in OpenSSL that perform unchecked type casting and pointer operations, potentially leading to type confusion or memory corruption when misused with incompatible stack types or incorrect indices.
+
+- **Vulnerability Type**
+  Type confusion due to unsafe pointer casting and lack of runtime type validation.
+
+- **Vulnerability Trigger**
+  Invoking stack functions (e.g., `sk_##t1##_delete`, `sk_##t1##_push`) with a stack (`STACK_OF(t1)`) that does not actually contain elements of type `t2`, or using an out-of-bounds index `i` that is not validated before passing to `OPENSSL_sk_delete`.
+
+- **Risky API or Data Flow**
+  The macros `DEFINE_SPECIAL_STACK_OF` and `DEFINE_STACK_OF` generate functions that cast between `t1*` and `t2*` without checks. Direct use of `OPENSSL_sk_delete` with an unvalidated index `i` can cause out-of-bounds access. The pointer casting in `sk_##t1##_delete_ptr` may lead to incorrect pointer comparison if `ptr` does not match the actual stack element type.
+
+- **Mutation Suggestions**
+  Introduce integer overflow in index calculations, replace safe comparisons with unsafe pointer arithmetic, omit bounds checks in `sk_##t1##_insert` or `sk_##t1##_set`, or simulate type confusion by swapping `t1` and `t2` in specific function definitions.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static ossl_inline int sk_##t1##_insert_at(STACK_OF(t1) *sk, t2 *ptr, unsigned int idx) {
+    // Vulnerability: Integer overflow in index calculation leading to out-of-bounds write
+    // If idx is very large (e.g., UINT_MAX), idx + 1 overflows to 0, bypassing bounds check
+    if (idx >= (unsigned int)OPENSSL_sk_num((OPENSSL_STACK *)sk)) {
+        return 0; // Supposed bounds check
+    }
+    // Overflow occurs here when idx == UINT_MAX
+    unsigned int new_size = idx + 1;
+    if (new_size < idx) { // This check is missing
+        return 0;
+    }
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)ptr, (int)idx);
+}
+```
+
+```c
+static ossl_inline t2 *sk_##t1##_delete_range(STACK_OF(t1) *sk, int start, int count) {
+    // Vulnerability: Missing bounds validation for start and count parameters
+    // Can delete arbitrary memory by using negative start or excessive count
+    t2 *deleted = NULL;
+    for (int i = 0; i < count; i++) {
+        // No check if start + i is within stack bounds
+        deleted = (t2 *)OPENSSL_sk_delete((OPENSSL_STACK *)sk, start + i);
+        if (!deleted) break;
+    }
+    return deleted; // Returns last deleted element (may be NULL)
+}
+```
+
+```c
+static ossl_inline int sk_##t1##_replace_all(STACK_OF(t1) *sk, t2 *old_ptr, t2 *new_ptr) {
+    // Vulnerability: Type confusion through unsafe pointer comparison
+    // Assumes old_ptr and stack elements are same type, but no runtime validation
+    int replaced = 0;
+    for (int i = 0; i < OPENSSL_sk_num((OPENSSL_STACK *)sk); i++) {
+        // Direct pointer comparison without type checking
+        if (OPENSSL_sk_value((OPENSSL_STACK *)sk, i) == (const void *)old_ptr) {
+            OPENSSL_sk_set((OPENSSL_STACK *)sk, i, (const void *)new_ptr);
+            replaced++;
+        }
+    }
+    return replaced; // May corrupt stack if types don't match
+}
+```
+
+```c
+static ossl_inline STACK_OF(t1) *sk_##t1##_split(STACK_OF(t1) *sk, int split_idx) {
+    // Vulnerability: Unchecked pointer arithmetic leading to heap overflow
+    // Creates new stack by copying elements without validating split_idx
+    if (!sk || split_idx < 0) return NULL;
+    
+    STACK_OF(t1) *new_sk = sk_##t1##_new_null();
+    if (!new_sk) return NULL;
+    
+    int total = OPENSSL_sk_num((OPENSSL_STACK *)sk);
+    // No validation that split_idx <= total
+    for (int i = split_idx; i < total; i++) {
+        t2 *elem = (t2 *)OPENSSL_sk_value((OPENSSL_STACK *)sk, i);
+        // If split_idx > total, loop uses negative i, accessing out-of-bounds memory
+        sk_##t1##_push(new_sk, elem);
+        OPENSSL_sk_delete((OPENSSL_STACK *)sk, i);
+        // Deletion changes indices, causing incorrect element removal
+    }
+    return new_sk; // May return stack with invalid/corrupted elements
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static ossl_inline int sk_##t1##_batch_insert(STACK_OF(t1) *sk, t2 **ptrs, size_t count, int start_idx) {
+    // Vulnerability: Integer overflow in buffer size calculation
+    // If count is large enough, count * sizeof(t2*) can overflow, causing undersized allocation
+    if (!sk || !ptrs || start_idx < 0) return 0;
+    
+    int current_size = OPENSSL_sk_num((OPENSSL_STACK *)sk);
+    if (start_idx > current_size) return 0;
+    
+    // Overflow point: if count > SIZE_MAX / sizeof(t2*)
+    size_t bytes_needed = count * sizeof(t2*);
+    if (bytes_needed < count) { // Weak check that can be bypassed
+        return 0;
+    }
+    
+    for (size_t i = 0; i < count; i++) {
+        // No bounds check after each insertion - start_idx + i may exceed INT_MAX
+        if (!OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)ptrs[i], start_idx + (int)i)) {
+            return (int)i; // Partial insertion without rollback
+        }
+    }
+    return (int)count;
+}
+```
+
+```c
+static ossl_inline t2 *sk_##t1##_rotate(STACK_OF(t1) *sk, int pivot) {
+    // Vulnerability: Signed integer wrap-around leading to out-of-bounds access
+    // Negative pivot values are used directly in pointer arithmetic
+    if (!sk) return NULL;
+    
+    int size = OPENSSL_sk_num((OPENSSL_STACK *)sk);
+    if (size == 0) return NULL;
+    
+    // No validation that pivot is within [0, size-1]
+    // Negative pivot causes wrap-around in modulo operation
+    int normalized_pivot = pivot % size;
+    if (normalized_pivot < 0) {
+        normalized_pivot += size; // Still negative if pivot is large negative
+    }
+    
+    // Direct access with potentially negative index
+    t2 *temp = (t2 *)OPENSSL_sk_value((OPENSSL_STACK *)sk, normalized_pivot);
+    
+    // Rotate elements without proper bounds checking
+    for (int i = normalized_pivot; i > 0; i--) {
+        t2 *current = (t2 *)OPENSSL_sk_value((OPENSSL_STACK *)sk, i - 1);
+        OPENSSL_sk_set((OPENSSL_STACK *)sk, i, (const void *)current);
+    }
+    OPENSSL_sk_set((OPENSSL_STACK *)sk, 0, (const void *)temp);
+    
+    return temp;
+}
+```
+
+```c
+static ossl_inline STACK_OF(t1) *sk_##t1##_filter(STACK_OF(t1) *sk, int (*predicate)(t2*)) {
+    // Vulnerability: Type confusion through callback function pointer
+    // Predicate expects t2* but stack may contain different underlying type
+    if (!sk || !predicate) return NULL;
+    
+    STACK_OF(t1) *filtered = sk_##t1##_new_null();
+    if (!filtered) return NULL;
+    
+    int size = OPENSSL_sk_num((OPENSSL_STACK *)sk);
+    for (int i = 0; i < size; i++) {
+        // Unsafe cast: assumes stack element is exactly t2*
+        t2 *elem = (t2 *)OPENSSL_sk_value((OPENSSL_STACK *)sk, i);
+        
+        // Callback with potentially incorrect type
+        if (predicate(elem)) {
+            // If predicate corrupts memory due to type mismatch, push may fail silently
+            sk_##t1##_push(filtered, elem);
+        }
+    }
+    
+    // Return stack that may contain incorrectly typed elements
+    return filtered;
+}
+```
+
+```c
+static ossl_inline int sk_##t1##_swap(STACK_OF(t1) *sk, int idx_a, int idx_b) {
+    // Vulnerability: Missing validation of array indices leading to arbitrary memory read/write
+    // Uses direct pointer manipulation without bounds checks
+    if (!sk) return 0;
+    
+    // No bounds checking on idx_a or idx_b
+    void *ptr_a = OPENSSL_sk_value((OPENSSL_STACK *)sk, idx_a);
+    void *ptr_b = OPENSSL_sk_value((OPENSSL_STACK *)sk, idx_b);
+    
+    if (!ptr_a || !ptr_b) return 0; // Check happens after out-of-bounds access
+    
+    // Direct memory swap without type safety
+    OPENSSL_sk_set((OPENSSL_STACK *)sk, idx_a, ptr_b);
+    OPENSSL_sk_set((OPENSSL_STACK *)sk, idx_b, ptr_a);
+    
+    return 1; // Success even if indices were invalid
+}
+```
+

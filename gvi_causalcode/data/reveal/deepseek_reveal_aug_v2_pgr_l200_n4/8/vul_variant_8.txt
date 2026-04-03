@@ -1,0 +1,245 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 8
+SeedId: unknown
+SeedFile: vul_variant_8.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_end_of_stripe ( Jbig2Ctx * ctx , Jbig2Segment * segment , const uint8_t * segment_data ) {
+ Jbig2Page page = ctx -> pages [ ctx -> current_page ] ;
+ int end_row ;
+ end_row = jbig2_get_int32 ( segment_data ) ;
+ if ( end_row < page . end_row ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "end of stripe segment with non-positive end row advance" " (new end row %d vs current end row %d)" , end_row , page . end_row ) ;
+ }
+ else {
+ jbig2_error ( ctx , JBIG2_SEVERITY_INFO , segment -> number , "end of stripe: advancing end row to %d" , end_row ) ;
+ }
+ page . end_row = end_row ;
+ return 0 ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  Processing a JBIG2 end of stripe segment that updates the page end row value, potentially causing out-of-bounds memory access in subsequent operations.
+
+- Vulnerability Type
+  Improper validation of input data leading to integer overflow/wraparound or out-of-bounds write.
+
+- Vulnerability Trigger
+  The `end_row` value from segment data is directly assigned to `page.end_row` without bounds checking relative to page height or buffer size, enabling negative or excessively large row values.
+
+- Risky API or Data Flow
+  Direct assignment of unchecked `jbig2_get_int32` return value to `page.end_row`, which may be used as array index or loop bound in other functions.
+
+- Mutation Suggestions
+  Introduce arithmetic overflow in row calculation, missing validation against maximum page dimensions, or unsafe use of `end_row` in pointer arithmetic.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int jbig2_handle_page_adjustment(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t stripe_height;
+    
+    stripe_height = jbig2_get_int32(segment_data);
+    
+    if (stripe_height > 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_INFO, segment->number,
+                   "adjusting page by stripe height %d", stripe_height);
+    } else {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "non-positive stripe height %d", stripe_height);
+    }
+    
+    // Vulnerability: Direct assignment without checking for integer overflow
+    page->rows_processed += stripe_height;
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t text_row_start;
+    uint8_t *text_buffer;
+    
+    text_row_start = jbig2_get_int32(segment_data);
+    
+    if (text_row_start < 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "negative text row start %d", text_row_start);
+        text_row_start = 0;
+    }
+    
+    // Vulnerability: No validation against page height, enabling out-of-bounds access
+    text_buffer = page->buffer + (text_row_start * page->stride);
+    
+    // Decode text region into buffer...
+    memcpy(text_buffer, segment_data + 4, segment->data_length - 4);
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_handle_stripe_offset(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t stripe_offset;
+    int32_t new_end_row;
+    
+    stripe_offset = jbig2_get_int32(segment_data);
+    
+    // Vulnerability: Arithmetic operation without overflow check
+    new_end_row = page->end_row + stripe_offset;
+    
+    if (new_end_row <= page->end_row) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "stripe offset %d results in non-positive advance", stripe_offset);
+    }
+    
+    page->end_row = new_end_row;
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_process_halftone_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t region_top, region_height;
+    uint8_t *region_start;
+    
+    region_top = jbig2_get_int32(segment_data);
+    region_height = jbig2_get_int32(segment_data + 4);
+    
+    if (region_height <= 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "invalid region height %d", region_height);
+        return -1;
+    }
+    
+    // Vulnerability: Missing bounds check - region_top + region_height can overflow
+    // and region_top * page->stride can also overflow
+    region_start = page->buffer + (region_top * page->stride);
+    
+    // Process halftone region of given height...
+    for (int i = 0; i < region_height; i++) {
+        memset(region_start + (i * page->stride), 0, page->width);
+    }
+    
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int jbig2_decode_symbol_bitmap(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t symbol_row, symbol_count;
+    uint8_t *dest_ptr;
+    
+    symbol_row = jbig2_get_int32(segment_data);
+    symbol_count = jbig2_get_int32(segment_data + 4);
+    
+    if (symbol_count <= 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "invalid symbol count %d", symbol_count);
+        return -1;
+    }
+    
+    // Vulnerability: No validation that symbol_row is within page bounds
+    // Allows negative or excessively large row values for buffer offset
+    dest_ptr = page->bitmap + (symbol_row * page->stride);
+    
+    // Decode symbols into the calculated position
+    for (int i = 0; i < symbol_count; i++) {
+        memcpy(dest_ptr + (i * SYMBOL_WIDTH), segment_data + 8 + (i * SYMBOL_SIZE), SYMBOL_SIZE);
+    }
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_adjust_refinement_grid(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t grid_offset, new_grid_end;
+    
+    grid_offset = jbig2_get_int32(segment_data);
+    
+    // Vulnerability: Arithmetic operation without overflow check
+    // grid_offset can be negative or positive large value causing wrap-around
+    new_grid_end = page->grid_end + grid_offset;
+    
+    if (new_grid_end < page->grid_start) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "grid offset %d moves end before start", grid_offset);
+    } else {
+        jbig2_error(ctx, JBIG2_SEVERITY_INFO, segment->number,
+                   "adjusting refinement grid end to %d", new_grid_end);
+    }
+    
+    page->grid_end = new_grid_end;
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_process_pattern_dict(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t pattern_index, pattern_row;
+    uint8_t *pattern_buffer;
+    
+    pattern_index = jbig2_get_int32(segment_data);
+    pattern_row = jbig2_get_int32(segment_data + 4);
+    
+    // Vulnerability: pattern_index used directly as array index without bounds check
+    // pattern_row used in pointer arithmetic without validation
+    pattern_buffer = page->pattern_table[pattern_index] + (pattern_row * PATTERN_STRIDE);
+    
+    // Copy pattern data into the calculated buffer location
+    memcpy(pattern_buffer, segment_data + 8, PATTERN_DATA_SIZE);
+    
+    return 0;
+}
+```
+
+```c
+int jbig2_update_cursor_position(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_data) {
+    Jbig2Page *page = &ctx->pages[ctx->current_page];
+    int32_t cursor_delta;
+    
+    cursor_delta = jbig2_get_int32(segment_data);
+    
+    // Vulnerability: Direct assignment of unchecked value to cursor position
+    // cursor_delta can be negative or cause integer overflow when added
+    page->cursor_row += cursor_delta;
+    
+    if (page->cursor_row < 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
+                   "cursor moved to negative row %d", page->cursor_row);
+        page->cursor_row = 0;
+    }
+    
+    return 0;
+}
+```
+

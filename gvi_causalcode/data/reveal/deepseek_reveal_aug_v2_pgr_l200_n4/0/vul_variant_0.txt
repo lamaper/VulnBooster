@@ -1,0 +1,201 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 0
+SeedId: unknown
+SeedFile: vul_variant_0.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static int alloc_addbyter ( int output , FILE * data ) {
+ struct asprintf * infop = ( struct asprintf * ) data ;
+ unsigned char outc = ( unsigned char ) output ;
+ if ( ! infop -> buffer ) {
+ infop -> buffer = malloc ( 32 ) ;
+ if ( ! infop -> buffer ) {
+ infop -> fail = 1 ;
+ return - 1 ;
+ }
+ infop -> alloc = 32 ;
+ infop -> len = 0 ;
+ }
+ else if ( infop -> len + 1 >= infop -> alloc ) {
+ char * newptr ;
+ newptr = realloc ( infop -> buffer , infop -> alloc * 2 ) ;
+ if ( ! newptr ) {
+ infop -> fail = 1 ;
+ return - 1 ;
+ }
+ infop -> buffer = newptr ;
+ infop -> alloc *= 2 ;
+ }
+ infop -> buffer [ infop -> len ] = outc ;
+ infop -> len ++ ;
+ return outc ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Integer overflow leading to buffer overflow
+- Vulnerability Trigger: When infop->len + 1 >= infop->alloc, the condition may overflow if infop->len is close to maximum integer value, causing incorrect reallocation logic.
+- Risky API or Data Flow: realloc with infop->alloc * 2 multiplication may overflow, leading to insufficient memory allocation.
+- Mutation Suggestions: Change arithmetic operations (e.g., infop->alloc * 2 to infop->alloc + 32), modify condition (e.g., infop->len >= infop->alloc - 1), or adjust initial allocation size.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int dynamic_buffer_append(char **buffer, size_t *allocated, size_t *used, char c) {
+    if (*used + 1 >= *allocated) {
+        size_t new_size = *allocated * 2;
+        char *new_buf = realloc(*buffer, new_size);
+        if (!new_buf) {
+            return -1;
+        }
+        *buffer = new_buf;
+        *allocated = new_size;
+    }
+    (*buffer)[*used] = c;
+    (*used)++;
+    return 0;
+}
+```
+
+```c
+int grow_string_buffer(struct string_buf *sb, int ch) {
+    if (sb->pos >= sb->capacity - 1) {
+        int new_cap = sb->capacity * 2;
+        char *tmp = realloc(sb->data, new_cap);
+        if (!tmp) {
+            return -1;
+        }
+        sb->data = tmp;
+        sb->capacity = new_cap;
+    }
+    sb->data[sb->pos] = (char)ch;
+    sb->pos++;
+    return ch;
+}
+```
+
+```c
+static int append_to_log_buffer(struct log_ctx *ctx, unsigned char byte) {
+    if (ctx->offset == ctx->bufsize) {
+        size_t new_size = ctx->bufsize * 2;
+        unsigned char *new_buf = realloc(ctx->buffer, new_size);
+        if (!new_buf) {
+            ctx->error = 1;
+            return -1;
+        }
+        ctx->buffer = new_buf;
+        ctx->bufsize = new_size;
+    }
+    ctx->buffer[ctx->offset] = byte;
+    ctx->offset++;
+    return byte;
+}
+```
+
+```c
+int buffer_add_byte(struct dynamic_buffer *buf, uint8_t value) {
+    if (buf->length + 1 > buf->allocated) {
+        size_t new_alloc = buf->allocated * 2;
+        uint8_t *new_data = realloc(buf->data, new_alloc);
+        if (!new_data) {
+            buf->failed = 1;
+            return 0;
+        }
+        buf->data = new_data;
+        buf->allocated = new_alloc;
+    }
+    buf->data[buf->length] = value;
+    buf->length++;
+    return 1;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int append_char_to_buffer(struct strbuf *sb, int ch) {
+    if (sb->len >= sb->cap - 1) {
+        size_t new_cap = sb->cap * 2;
+        char *new_ptr = realloc(sb->ptr, new_cap);
+        if (!new_ptr) {
+            sb->oom = 1;
+            return -1;
+        }
+        sb->ptr = new_ptr;
+        sb->cap = new_cap;
+    }
+    sb->ptr[sb->len] = (char)ch;
+    sb->len++;
+    return ch;
+}
+```
+
+```c
+int packet_buffer_write(struct pkt_buf *pb, uint8_t byte) {
+    if (pb->write_idx + 1 >= pb->buf_size) {
+        uint32_t new_size = pb->buf_size * 2;
+        uint8_t *tmp = realloc(pb->data, new_size);
+        if (!tmp) {
+            pb->status = PKT_BUF_OOM;
+            return 0;
+        }
+        pb->data = tmp;
+        pb->buf_size = new_size;
+    }
+    pb->data[pb->write_idx] = byte;
+    pb->write_idx++;
+    return 1;
+}
+```
+
+```c
+static size_t cache_append_byte(struct cache_line *cl, unsigned char b) {
+    if (cl->filled >= cl->allocated) {
+        size_t new_alloc = cl->allocated * 2;
+        unsigned char *new_buf = realloc(cl->block, new_alloc);
+        if (!new_buf) {
+            cl->error_flag = 1;
+            return 0;
+        }
+        cl->block = new_buf;
+        cl->allocated = new_alloc;
+    }
+    cl->block[cl->filled] = b;
+    cl->filled++;
+    return cl->filled;
+}
+```
+
+```c
+int circular_buffer_push(struct circ_buf *cb, char datum) {
+    if (cb->count == cb->capacity) {
+        int new_cap = cb->capacity * 2;
+        char *new_array = realloc(cb->items, new_cap);
+        if (!new_array) {
+            return -1;
+        }
+        cb->items = new_array;
+        cb->capacity = new_cap;
+    }
+    size_t write_at = (cb->head + cb->count) % cb->capacity;
+    cb->items[write_at] = datum;
+    cb->count++;
+    return 0;
+}
+```
+

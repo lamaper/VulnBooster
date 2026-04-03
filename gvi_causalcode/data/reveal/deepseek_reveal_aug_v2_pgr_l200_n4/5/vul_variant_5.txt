@@ -1,0 +1,465 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 5
+SeedId: unknown
+SeedFile: vul_variant_5.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_decode_halftone_region ( Jbig2Ctx * ctx , Jbig2Segment * segment , Jbig2HalftoneRegionParams * params , const byte * data , const size_t size , Jbig2Image * image , Jbig2ArithCx * GB_stats ) {
+ uint32_t HBPP ;
+ uint32_t HNUMPATS ;
+ uint8_t * * GI ;
+ Jbig2Image * HSKIP = NULL ;
+ Jbig2PatternDict * HPATS ;
+ int i ;
+ uint32_t mg , ng ;
+ int32_t x , y ;
+ uint8_t gray_val ;
+ memset ( image -> data , params -> HDEFPIXEL , image -> stride * image -> height ) ;
+ if ( params -> HENABLESKIP == 1 ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "unhandled option HENABLESKIP" ) ;
+ }
+ HPATS = jbig2_decode_ht_region_get_hpats ( ctx , segment ) ;
+ if ( ! HPATS ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "no pattern dictionary found, skipping halftone image" ) ;
+ return - 1 ;
+ }
+ HNUMPATS = HPATS -> n_patterns ;
+ HBPP = 0 ;
+ while ( HNUMPATS > ( 1 << ++ HBPP ) ) ;
+ GI = jbig2_decode_gray_scale_image ( ctx , segment , data , size , params -> HMMR , params -> HGW , params -> HGH , HBPP , params -> HENABLESKIP , HSKIP , params -> HTEMPLATE , GB_stats ) ;
+ if ( ! GI ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "unable to acquire gray-scale image, skipping halftone image" ) ;
+ return - 1 ;
+ }
+ for ( mg = 0 ;
+ mg < params -> HGH ;
+ ++ mg ) {
+ for ( ng = 0 ;
+ ng < params -> HGW ;
+ ++ ng ) {
+ x = ( params -> HGX + mg * params -> HRY + ng * params -> HRX ) >> 8 ;
+ y = ( params -> HGY + mg * params -> HRX - ng * params -> HRY ) >> 8 ;
+ gray_val = GI [ ng ] [ mg ] ;
+ if ( gray_val >= HNUMPATS ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "gray-scale image uses value %d which larger than pattern dictionary" , gray_val ) ;
+ gray_val = HNUMPATS - 1 ;
+ }
+ jbig2_image_compose ( ctx , image , HPATS -> patterns [ gray_val ] , x , y , params -> op ) ;
+ }
+ }
+ for ( i = 0 ;
+ i < params -> HGW ;
+ ++ i ) {
+ jbig2_free ( ctx -> allocator , GI [ i ] ) ;
+ }
+ jbig2_free ( ctx -> allocator , GI ) ;
+ return 0 ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**: Decoding a halftone region in a JBIG2 image, where a gray-scale image guides pattern placement.
+- **Vulnerability Type**: Integer overflow leading to heap buffer overflow.
+- **Vulnerability Trigger**: When `params->HGW` and `params->HGH` are large, the multiplication `image->stride * image->height` can overflow, causing insufficient memory initialization.
+- **Risky API or Data Flow**: `memset(image->data, params->HDEFPIXEL, image->stride * image->height)` with unchecked multiplication; subsequent loops using `params->HGW` and `params->HGH` to allocate and index `GI`.
+- **Mutation Suggestions**: Modify arithmetic operations (e.g., change bit shifts, adjust multiplications), alter loop bounds, introduce off-by-one errors in array indexing, or vary size calculations.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int decode_tiled_pattern(Jbig2Ctx *ctx, Jbig2Segment *segment, TileParams *params, const byte *data, size_t size, Jbig2Image *image) {
+    uint32_t tile_width = params->tile_w;
+    uint32_t tile_height = params->tile_h;
+    uint32_t grid_cols = params->grid_cols;
+    uint32_t grid_rows = params->grid_rows;
+    uint8_t *tile_indices;
+    Jbig2Image **tiles;
+    int i, j;
+    
+    // Integer overflow in buffer size calculation
+    size_t buffer_size = tile_width * tile_height * grid_cols;
+    uint8_t *tile_buffer = jbig2_alloc(ctx->allocator, buffer_size);
+    if (!tile_buffer) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate tile buffer");
+        return -1;
+    }
+    
+    // Overflow in memset size
+    memset(image->data, 0, image->stride * image->height);
+    
+    tile_indices = decode_index_stream(ctx, data, size, grid_cols * grid_rows);
+    if (!tile_indices) return -1;
+    
+    tiles = load_tile_set(ctx, segment, params->tile_set_id);
+    if (!tiles) {
+        jbig2_free(ctx->allocator, tile_indices);
+        return -1;
+    }
+    
+    for (i = 0; i < grid_rows; i++) {
+        for (j = 0; j < grid_cols; j++) {
+            uint8_t idx = tile_indices[i * grid_cols + j];
+            if (idx >= params->num_tiles) {
+                idx = params->num_tiles - 1;
+            }
+            int x = j * tile_width;
+            int y = i * tile_height;
+            jbig2_image_compose(ctx, image, tiles[idx], x, y, JBIG2_COMPOSE_REPLACE);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, tile_indices);
+    jbig2_free(ctx->allocator, tile_buffer);
+    return 0;
+}
+```
+
+```c
+int render_glyph_mask(Jbig2Ctx *ctx, Jbig2Segment *segment, GlyphParams *params, const byte *data, size_t size, Jbig2Image *output) {
+    uint32_t num_glyphs = params->glyph_count;
+    uint32_t grid_width = params->grid_w;
+    uint32_t grid_height = params->grid_h;
+    Jbig2Image **glyphs;
+    uint8_t *placement_map;
+    int i, j;
+    
+    // Potential integer overflow in allocation size
+    size_t map_size = grid_width * grid_height * sizeof(uint8_t);
+    placement_map = jbig2_alloc(ctx->allocator, map_size);
+    if (!placement_map) return -1;
+    
+    // Overflow in initialization size
+    memset(output->data, params->background, output->stride * output->height);
+    
+    glyphs = jbig2_decode_glyph_set(ctx, segment, data, size, num_glyphs);
+    if (!glyphs) {
+        jbig2_free(ctx->allocator, placement_map);
+        return -1;
+    }
+    
+    decode_placement_grid(ctx, placement_map, grid_width, grid_height);
+    
+    for (i = 0; i < grid_height; i++) {
+        for (j = 0; j < grid_width; j++) {
+            uint8_t glyph_idx = placement_map[i * grid_width + j];
+            if (glyph_idx >= num_glyphs) {
+                glyph_idx = num_glyphs - 1;
+            }
+            int x = params->offset_x + j * params->cell_w;
+            int y = params->offset_y + i * params->cell_h;
+            // No bounds check on x,y before composition
+            jbig2_image_compose(ctx, output, glyphs[glyph_idx], x, y, params->compose_op);
+        }
+    }
+    
+    for (i = 0; i < num_glyphs; i++) {
+        jbig2_image_release(ctx, glyphs[i]);
+    }
+    jbig2_free(ctx->allocator, glyphs);
+    jbig2_free(ctx->allocator, placement_map);
+    return 0;
+}
+```
+
+```c
+int process_symbol_region(Jbig2Ctx *ctx, Jbig2Segment *segment, SymbolRegionParams *params, const byte *data, size_t size, Jbig2Image *dest) {
+    uint32_t sym_width = params->sym_width;
+    uint32_t sym_height = params->sym_height;
+    uint32_t num_symbols = params->num_symbols;
+    uint32_t *sym_indices;
+    Jbig2Image **symbols;
+    int i, j;
+    
+    // Integer overflow in temporary buffer allocation
+    size_t tmp_size = sym_width * sym_height * params->grid_cols;
+    uint8_t *tmp_buf = jbig2_alloc(ctx->allocator, tmp_size);
+    if (!tmp_buf) return -1;
+    
+    // Overflow in memset size calculation
+    memset(dest->data, params->def_pixel, dest->stride * dest->height);
+    
+    symbols = jbig2_decode_symbol_dict(ctx, segment, data, size, num_symbols);
+    if (!symbols) {
+        jbig2_free(ctx->allocator, tmp_buf);
+        return -1;
+    }
+    
+    sym_indices = decode_symbol_instances(ctx, params->instance_data, params->instance_len);
+    if (!sym_indices) {
+        jbig2_free(ctx->allocator, tmp_buf);
+        for (i = 0; i < num_symbols; i++) jbig2_image_release(ctx, symbols[i]);
+        jbig2_free(ctx->allocator, symbols);
+        return -1;
+    }
+    
+    for (i = 0; i < params->grid_rows; i++) {
+        for (j = 0; j < params->grid_cols; j++) {
+            uint32_t idx = sym_indices[i * params->grid_cols + j];
+            if (idx >= num_symbols) idx = num_symbols - 1;
+            int x = params->start_x + j * params->delta_x;
+            int y = params->start_y + i * params->delta_y;
+            // Potential out-of-bounds write if x,y negative or too large
+            jbig2_image_compose(ctx, dest, symbols[idx], x, y, JBIG2_COMPOSE_OR);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, sym_indices);
+    jbig2_free(ctx->allocator, tmp_buf);
+    for (i = 0; i < num_symbols; i++) jbig2_image_release(ctx, symbols[i]);
+    jbig2_free(ctx->allocator, symbols);
+    return 0;
+}
+```
+
+```c
+int decode_color_mapped_region(Jbig2Ctx *ctx, Jbig2Segment *segment, ColorMapParams *params, const byte *data, size_t size, Jbig2Image *output) {
+    uint32_t map_width = params->map_w;
+    uint32_t map_height = params->map_h;
+    uint32_t num_colors = params->color_count;
+    uint8_t *color_map;
+    uint32_t *color_table;
+    int i, j;
+    
+    // Integer overflow in allocation size
+    size_t table_size = num_colors * sizeof(uint32_t) * 3; // RGB components
+    color_table = jbig2_alloc(ctx->allocator, table_size);
+    if (!color_table) return -1;
+    
+    // Overflow in memset size
+    memset(output->data, params->bg_color, output->stride * output->height);
+    
+    color_map = decode_color_indices(ctx, data, size, map_width * map_height);
+    if (!color_map) {
+        jbig2_free(ctx->allocator, color_table);
+        return -1;
+    }
+    
+    load_color_palette(ctx, color_table, num_colors);
+    
+    for (i = 0; i < map_height; i++) {
+        for (j = 0; j < map_width; j++) {
+            uint8_t color_idx = color_map[i * map_width + j];
+            if (color_idx >= num_colors) {
+                color_idx = num_colors - 1;
+            }
+            int x = params->offset_x + j * params->pixel_pitch;
+            int y = params->offset_y + i * params->line_pitch;
+            uint32_t color = color_table[color_idx];
+            // Direct pixel write without bounds checking
+            set_pixel_color(output, x, y, color);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, color_map);
+    jbig2_free(ctx->allocator, color_table);
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int decode_tiled_pattern(Jbig2Ctx *ctx, Jbig2Segment *segment, TileParams *params, const byte *data, size_t size, Jbig2Image *image) {
+    uint32_t tile_width = params->tile_w;
+    uint32_t tile_height = params->tile_h;
+    uint32_t grid_cols = params->grid_cols;
+    uint32_t grid_rows = params->grid_rows;
+    uint8_t *tile_indices;
+    Jbig2Image **tiles;
+    int i, j;
+    
+    // Integer overflow in buffer size calculation (width * cols may overflow)
+    size_t buffer_size = tile_width * grid_cols;
+    uint8_t *tile_buffer = jbig2_alloc(ctx->allocator, buffer_size);
+    if (!tile_buffer) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate tile buffer");
+        return -1;
+    }
+    
+    // Overflow in memset size (stride * height may exceed 32-bit)
+    memset(image->data, 0, image->stride * image->height);
+    
+    tile_indices = decode_index_stream(ctx, data, size, grid_cols * grid_rows);
+    if (!tile_indices) {
+        jbig2_free(ctx->allocator, tile_buffer);
+        return -1;
+    }
+    
+    tiles = load_tile_set(ctx, segment, params->tile_set_id);
+    if (!tiles) {
+        jbig2_free(ctx->allocator, tile_indices);
+        jbig2_free(ctx->allocator, tile_buffer);
+        return -1;
+    }
+    
+    for (i = 0; i < grid_rows; i++) {
+        for (j = 0; j < grid_cols; j++) {
+            uint8_t idx = tile_indices[i * grid_cols + j];
+            if (idx >= params->num_tiles) {
+                idx = params->num_tiles - 1;
+            }
+            int x = j * tile_width;
+            int y = i * tile_height;
+            jbig2_image_compose(ctx, image, tiles[idx], x, y, JBIG2_COMPOSE_REPLACE);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, tile_indices);
+    jbig2_free(ctx->allocator, tile_buffer);
+    return 0;
+}
+```
+
+```c
+int render_glyph_mask(Jbig2Ctx *ctx, Jbig2Segment *segment, GlyphParams *params, const byte *data, size_t size, Jbig2Image *output) {
+    uint32_t num_glyphs = params->glyph_count;
+    uint32_t grid_width = params->grid_w;
+    uint32_t grid_height = params->grid_h;
+    Jbig2Image **glyphs;
+    uint8_t *placement_map;
+    int i, j;
+    
+    // Potential integer overflow in allocation size (grid_w * grid_h may exceed size_t)
+    size_t map_size = grid_width * grid_height;
+    placement_map = jbig2_alloc(ctx->allocator, map_size);
+    if (!placement_map) return -1;
+    
+    // Overflow in initialization size (stride * height multiplication)
+    memset(output->data, params->background, output->stride * output->height);
+    
+    glyphs = jbig2_decode_glyph_set(ctx, segment, data, size, num_glyphs);
+    if (!glyphs) {
+        jbig2_free(ctx->allocator, placement_map);
+        return -1;
+    }
+    
+    decode_placement_grid(ctx, placement_map, grid_width, grid_height);
+    
+    for (i = 0; i < grid_height; i++) {
+        for (j = 0; j < grid_width; j++) {
+            uint8_t glyph_idx = placement_map[i * grid_width + j];
+            if (glyph_idx >= num_glyphs) {
+                glyph_idx = num_glyphs - 1;
+            }
+            int x = params->offset_x + j * params->cell_w;
+            int y = params->offset_y + i * params->cell_h;
+            jbig2_image_compose(ctx, output, glyphs[glyph_idx], x, y, params->compose_op);
+        }
+    }
+    
+    for (i = 0; i < num_glyphs; i++) {
+        jbig2_image_release(ctx, glyphs[i]);
+    }
+    jbig2_free(ctx->allocator, glyphs);
+    jbig2_free(ctx->allocator, placement_map);
+    return 0;
+}
+```
+
+```c
+int process_symbol_region(Jbig2Ctx *ctx, Jbig2Segment *segment, SymbolRegionParams *params, const byte *data, size_t size, Jbig2Image *dest) {
+    uint32_t sym_width = params->sym_width;
+    uint32_t sym_height = params->sym_height;
+    uint32_t num_symbols = params->num_symbols;
+    uint32_t *sym_indices;
+    Jbig2Image **symbols;
+    int i, j;
+    
+    // Integer overflow in temporary buffer allocation (sym_width * grid_cols)
+    size_t tmp_size = sym_width * params->grid_cols;
+    uint8_t *tmp_buf = jbig2_alloc(ctx->allocator, tmp_size);
+    if (!tmp_buf) return -1;
+    
+    // Overflow in memset size calculation (stride * height)
+    memset(dest->data, params->def_pixel, dest->stride * dest->height);
+    
+    symbols = jbig2_decode_symbol_dict(ctx, segment, data, size, num_symbols);
+    if (!symbols) {
+        jbig2_free(ctx->allocator, tmp_buf);
+        return -1;
+    }
+    
+    sym_indices = decode_symbol_instances(ctx, params->instance_data, params->instance_len);
+    if (!sym_indices) {
+        jbig2_free(ctx->allocator, tmp_buf);
+        for (i = 0; i < num_symbols; i++) jbig2_image_release(ctx, symbols[i]);
+        jbig2_free(ctx->allocator, symbols);
+        return -1;
+    }
+    
+    for (i = 0; i < params->grid_rows; i++) {
+        for (j = 0; j < params->grid_cols; j++) {
+            uint32_t idx = sym_indices[i * params->grid_cols + j];
+            if (idx >= num_symbols) idx = num_symbols - 1;
+            int x = params->start_x + j * params->delta_x;
+            int y = params->start_y + i * params->delta_y;
+            jbig2_image_compose(ctx, dest, symbols[idx], x, y, JBIG2_COMPOSE_OR);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, sym_indices);
+    jbig2_free(ctx->allocator, tmp_buf);
+    for (i = 0; i < num_symbols; i++) jbig2_image_release(ctx, symbols[i]);
+    jbig2_free(ctx->allocator, symbols);
+    return 0;
+}
+```
+
+```c
+int decode_color_mapped_region(Jbig2Ctx *ctx, Jbig2Segment *segment, ColorMapParams *params, const byte *data, size_t size, Jbig2Image *output) {
+    uint32_t map_width = params->map_w;
+    uint32_t map_height = params->map_h;
+    uint32_t num_colors = params->color_count;
+    uint8_t *color_map;
+    uint32_t *color_table;
+    int i, j;
+    
+    // Integer overflow in allocation size (num_colors * 3 may overflow when multiplied by sizeof(uint32_t))
+    size_t table_size = num_colors * 3 * sizeof(uint32_t);
+    color_table = jbig2_alloc(ctx->allocator, table_size);
+    if (!color_table) return -1;
+    
+    // Overflow in memset size (stride * height)
+    memset(output->data, params->bg_color, output->stride * output->height);
+    
+    color_map = decode_color_indices(ctx, data, size, map_width * map_height);
+    if (!color_map) {
+        jbig2_free(ctx->allocator, color_table);
+        return -1;
+    }
+    
+    load_color_palette(ctx, color_table, num_colors);
+    
+    for (i = 0; i < map_height; i++) {
+        for (j = 0; j < map_width; j++) {
+            uint8_t color_idx = color_map[i * map_width + j];
+            if (color_idx >= num_colors) {
+                color_idx = num_colors - 1;
+            }
+            int x = params->offset_x + j * params->pixel_pitch;
+            int y = params->offset_y + i * params->line_pitch;
+            uint32_t color = color_table[color_idx * 3];
+            set_pixel_color(output, x, y, color);
+        }
+    }
+    
+    jbig2_free(ctx->allocator, color_map);
+    jbig2_free(ctx->allocator, color_table);
+    return 0;
+}
+```
+

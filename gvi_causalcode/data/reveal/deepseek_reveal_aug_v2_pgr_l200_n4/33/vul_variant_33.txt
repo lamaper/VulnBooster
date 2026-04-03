@@ -1,0 +1,308 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 33
+SeedId: unknown
+SeedFile: vul_variant_33.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Use-After-Free
+- Vulnerability Trigger: Calling `sk_OPENSSL_STRING_pop_free` on a stack that is later accessed via `sk_OPENSSL_STRING_find` or similar functions.
+- Risky API or Data Flow: The `pop_free` function frees all elements and the stack structure, but does not nullify the caller's pointer, leading to potential dangling references.
+- Mutation Suggestions: Introduce a missing null check after `pop_free`, misuse a stack after `pop_free` in a conditional branch, or duplicate a stack that has been freed.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int verify_certificate_chain(STACK_OF(OPENSSL_STRING) *cert_chain) {
+    if (cert_chain == NULL) {
+        return 0;
+    }
+    // Simulate a condition where we might free the chain
+    if (some_validation_failed()) {
+        sk_OPENSSL_STRING_pop_free(cert_chain, free);
+        // Missing: cert_chain = NULL;
+    }
+    // Vulnerability: Use-after-free if the above branch was taken
+    int count = sk_OPENSSL_STRING_num(cert_chain);
+    for (int i = 0; i < count; i++) {
+        const char *cert = sk_OPENSSL_STRING_value(cert_chain, i);
+        if (cert && !validate_certificate(cert)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+```
+
+```c
+static STACK_OF(OPENSSL_STRING) *filter_hostnames(STACK_OF(OPENSSL_STRING) *hosts, const char *blacklist) {
+    STACK_OF(OPENSSL_STRING) *filtered = sk_OPENSSL_STRING_new_null();
+    if (!filtered) return NULL;
+
+    for (int i = 0; i < sk_OPENSSL_STRING_num(hosts); i++) {
+        const char *host = sk_OPENSSL_STRING_value(hosts, i);
+        if (strstr(host, blacklist) == NULL) {
+            sk_OPENSSL_STRING_push(filtered, host);
+        }
+    }
+    
+    // Free original stack but keep using it for logging
+    sk_OPENSSL_STRING_pop_free(hosts, free);
+    
+    // Vulnerability: Use-after-free in logging
+    fprintf(stderr, "Filtered %d hosts from original set of %d\n", 
+            sk_OPENSSL_STRING_num(filtered), 
+            sk_OPENSSL_STRING_num(hosts)); // hosts is dangling
+    
+    return filtered;
+}
+```
+
+```c
+static int compare_strings(const char * const *a, const char * const *b) {
+    return strcmp(*a, *b);
+}
+
+static STACK_OF(OPENSSL_STRING) *sort_and_deduplicate(STACK_OF(OPENSSL_STRING) *list) {
+    if (!list) return NULL;
+    
+    STACK_OF(OPENSSL_STRING) *dedup = sk_OPENSSL_STRING_dup(list);
+    if (!dedup) return NULL;
+    
+    sk_OPENSSL_STRING_set_cmp_func(dedup, compare_strings);
+    sk_OPENSSL_STRING_sort(dedup);
+    
+    // Remove duplicates in-place
+    for (int i = 1; i < sk_OPENSSL_STRING_num(dedup); i++) {
+        if (strcmp(sk_OPENSSL_STRING_value(dedup, i-1), 
+                   sk_OPENSSL_STRING_value(dedup, i)) == 0) {
+            char *dup = sk_OPENSSL_STRING_delete(dedup, i);
+            free(dup);
+            i--;
+        }
+    }
+    
+    // Free original list
+    sk_OPENSSL_STRING_pop_free(list, free);
+    
+    // Vulnerability: Later code path uses original list by mistake
+    if (sk_OPENSSL_STRING_num(list) > 100) { // list is dangling
+        log_warning("Original list was very large");
+    }
+    
+    return dedup;
+}
+```
+
+```c
+static int find_and_remove_malicious(STACK_OF(OPENSSL_STRING) *urls) {
+    int removed = 0;
+    STACK_OF(OPENSSL_STRING) *malicious = NULL;
+    
+    for (int i = 0; i < sk_OPENSSL_STRING_num(urls); i++) {
+        const char *url = sk_OPENSSL_STRING_value(urls, i);
+        if (is_malicious(url)) {
+            if (!malicious) {
+                malicious = sk_OPENSSL_STRING_new_null();
+                if (!malicious) break;
+            }
+            sk_OPENSSL_STRING_push(malicious, url);
+        }
+    }
+    
+    if (malicious) {
+        // Remove all malicious URLs from original stack
+        for (int i = 0; i < sk_OPENSSL_STRING_num(malicious); i++) {
+            const char *bad = sk_OPENSSL_STRING_value(malicious, i);
+            int idx = sk_OPENSSL_STRING_find(urls, bad); // Safe here
+            if (idx >= 0) {
+                char *removed_str = sk_OPENSSL_STRING_delete(urls, idx);
+                free(removed_str);
+                removed++;
+            }
+        }
+        
+        // Free malicious list
+        sk_OPENSSL_STRING_pop_free(malicious, free);
+        
+        // Vulnerability: Double-free scenario if malicious list contained pointers
+        // also present in urls, and urls is later freed with pop_free
+        // The individual strings are now freed twice when urls is cleaned up.
+    }
+    
+    // Additional vulnerability: If urls becomes empty after removal,
+    // and this function is followed by sk_OPENSSL_STRING_pop_free(urls, free),
+    // the strings were already freed above, causing double-free.
+    return removed;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int validate_certificate_bundle(STACK_OF(OPENSSL_STRING) *certs) {
+    if (certs == NULL) return 0;
+    
+    int err = 0;
+    for (int i = 0; i < sk_OPENSSL_STRING_num(certs); i++) {
+        const char *cert = sk_OPENSSL_STRING_value(certs, i);
+        if (!cert || !verify_x509_pem(cert)) {
+            err = 1;
+            break;
+        }
+    }
+    
+    if (err) {
+        sk_OPENSSL_STRING_pop_free(certs, OPENSSL_free);
+        // Missing nullification of caller's pointer
+    }
+    
+    // Vulnerability: Use-after-free if error occurred
+    if (sk_OPENSSL_STRING_is_sorted(certs)) { // certs may be dangling
+        log_debug("Certificate stack was pre-sorted");
+    }
+    
+    return err == 0;
+}
+```
+
+```c
+static STACK_OF(OPENSSL_STRING) *sanitize_domains(STACK_OF(OPENSSL_STRING) *domains) {
+    STACK_OF(OPENSSL_STRING) *clean = sk_OPENSSL_STRING_new_null();
+    if (!clean) return NULL;
+    
+    for (int i = 0; i < sk_OPENSSL_STRING_num(domains); i++) {
+        char *domain = sk_OPENSSL_STRING_value(domains, i);
+        char *sanitized = sanitize_hostname(domain);
+        if (sanitized) {
+            sk_OPENSSL_STRING_push(clean, sanitized);
+        }
+    }
+    
+    // Free original but keep pointer for size comparison
+    sk_OPENSSL_STRING_pop_free(domains, OPENSSL_free);
+    
+    // Vulnerability: Use-after-free in diagnostic
+    if (g_verbose_logging) {
+        fprintf(stderr, "Sanitized %zu domains (from %zu)\n",
+                sk_OPENSSL_STRING_num(clean),
+                sk_OPENSSL_STRING_num(domains)); // domains is dangling
+    }
+    
+    return clean;
+}
+```
+
+```c
+static int merge_config_strings(STACK_OF(OPENSSL_STRING) **primary, STACK_OF(OPENSSL_STRING) *secondary) {
+    if (!primary || !*primary || !secondary) return 0;
+    
+    // Merge secondary into primary
+    for (int i = 0; i < sk_OPENSSL_STRING_num(secondary); i++) {
+        const char *str = sk_OPENSSL_STRING_value(secondary, i);
+        if (sk_OPENSSL_STRING_find(*primary, str) == -1) {
+            char *dup = OPENSSL_strdup(str);
+            if (!dup || !sk_OPENSSL_STRING_push(*primary, dup)) {
+                OPENSSL_free(dup);
+                return 0;
+            }
+        }
+    }
+    
+    // Free secondary
+    sk_OPENSSL_STRING_pop_free(secondary, OPENSSL_free);
+    
+    // Vulnerability: Secondary may be accessed later through alias
+    if (sk_OPENSSL_STRING_num(secondary) > 0) { // secondary is dangling
+        // This branch should not be reachable, but pointer is used
+        log_warning("Secondary stack was non-empty after merge");
+    }
+    
+    return 1;
+}
+```
+
+```c
+static STACK_OF(OPENSSL_STRING) *filter_and_sort_headers(STACK_OF(OPENSSL_STRING) *headers) {
+    STACK_OF(OPENSSL_STRING) *filtered = sk_OPENSSL_STRING_dup(headers);
+    if (!filtered) return NULL;
+    
+    // Remove empty headers
+    for (int i = 0; i < sk_OPENSSL_STRING_num(filtered); i++) {
+        const char *hdr = sk_OPENSSL_STRING_value(filtered, i);
+        if (!hdr || hdr[0] == '\0') {
+            char *removed = sk_OPENSSL_STRING_delete(filtered, i);
+            OPENSSL_free(removed);
+            i--;
+        }
+    }
+    
+    // Sort alphabetically
+    sk_OPENSSL_STRING_sort(filtered);
+    
+    // Free original if it's not the same as filtered
+    if (headers != filtered) {
+        sk_OPENSSL_STRING_pop_free(headers, OPENSSL_free);
+        // Missing: headers = NULL;
+    }
+    
+    // Vulnerability: Conditional use-after-free
+    if (headers && sk_OPENSSL_STRING_num(headers) > 50) { // headers may be dangling
+        // This check is dangerous after pop_free
+        return sk_OPENSSL_STRING_deep_copy(filtered, OPENSSL_strdup, OPENSSL_free);
+    }
+    
+    return filtered;
+}
+```
+

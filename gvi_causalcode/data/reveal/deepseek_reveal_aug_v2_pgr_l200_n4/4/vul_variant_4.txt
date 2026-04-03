@@ -1,0 +1,473 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 4
+SeedId: unknown
+SeedFile: vul_variant_4.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_immediate_generic_region ( Jbig2Ctx * ctx , Jbig2Segment * segment , const byte * segment_data ) {
+ Jbig2RegionSegmentInfo rsi ;
+ byte seg_flags ;
+ int8_t gbat [ 8 ] ;
+ int offset ;
+ int gbat_bytes = 0 ;
+ Jbig2GenericRegionParams params ;
+ int code = 0 ;
+ Jbig2Image * image = NULL ;
+ Jbig2WordStream * ws = NULL ;
+ Jbig2ArithState * as = NULL ;
+ Jbig2ArithCx * GB_stats = NULL ;
+ if ( segment -> data_length < 18 ) return jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Segment too short" ) ;
+ jbig2_get_region_segment_info ( & rsi , segment_data ) ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_INFO , segment -> number , "generic region: %d x %d @ (%d, %d), flags = %02x" , rsi . width , rsi . height , rsi . x , rsi . y , rsi . flags ) ;
+ seg_flags = segment_data [ 17 ] ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_INFO , segment -> number , "segment flags = %02x" , seg_flags ) ;
+ if ( ( seg_flags & 1 ) && ( seg_flags & 6 ) ) jbig2_error ( ctx , JBIG2_SEVERITY_WARNING , segment -> number , "MMR is 1, but GBTEMPLATE is not 0" ) ;
+ if ( ! ( seg_flags & 1 ) ) {
+ gbat_bytes = ( seg_flags & 6 ) ? 2 : 8 ;
+ if ( 18 + gbat_bytes > segment -> data_length ) return jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "Segment too short" ) ;
+ memcpy ( gbat , segment_data + 18 , gbat_bytes ) ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_INFO , segment -> number , "gbat: %d, %d" , gbat [ 0 ] , gbat [ 1 ] ) ;
+ }
+ offset = 18 + gbat_bytes ;
+ params . MMR = seg_flags & 1 ;
+ params . GBTEMPLATE = ( seg_flags & 6 ) >> 1 ;
+ params . TPGDON = ( seg_flags & 8 ) >> 3 ;
+ params . USESKIP = 0 ;
+ memcpy ( params . gbat , gbat , gbat_bytes ) ;
+ image = jbig2_image_new ( ctx , rsi . width , rsi . height ) ;
+ if ( image == NULL ) return jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "unable to allocate generic image" ) ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , segment -> number , "allocated %d x %d image buffer for region decode results" , rsi . width , rsi . height ) ;
+ if ( params . MMR ) {
+ code = jbig2_decode_generic_mmr ( ctx , segment , & params , segment_data + offset , segment -> data_length - offset , image ) ;
+ }
+ else {
+ int stats_size = jbig2_generic_stats_size ( ctx , params . GBTEMPLATE ) ;
+ GB_stats = jbig2_new ( ctx , Jbig2ArithCx , stats_size ) ;
+ if ( GB_stats == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "unable to allocate GB_stats in jbig2_immediate_generic_region" ) ;
+ goto cleanup ;
+ }
+ memset ( GB_stats , 0 , stats_size ) ;
+ ws = jbig2_word_stream_buf_new ( ctx , segment_data + offset , segment -> data_length - offset ) ;
+ if ( ws == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "unable to allocate ws in jbig2_immediate_generic_region" ) ;
+ goto cleanup ;
+ }
+ as = jbig2_arith_new ( ctx , ws ) ;
+ if ( as == NULL ) {
+ code = jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "unable to allocate as in jbig2_immediate_generic_region" ) ;
+ goto cleanup ;
+ }
+ code = jbig2_decode_generic_region ( ctx , segment , & params , as , image , GB_stats ) ;
+ }
+ if ( code >= 0 ) jbig2_page_add_result ( ctx , & ctx -> pages [ ctx -> current_page ] , image , rsi . x , rsi . y , rsi . op ) ;
+ else jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , segment -> number , "error while decoding immediate_generic_region" ) ;
+ cleanup : jbig2_free ( ctx -> allocator , as ) ;
+ jbig2_word_stream_buf_free ( ctx , ws ) ;
+ jbig2_free ( ctx -> allocator , GB_stats ) ;
+ jbig2_image_release ( ctx , image ) ;
+ return code ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+**Scenario**
+Parsing a JBIG2 image segment containing a generic region with immediate decoding, where segment data length and flags dictate memory operations and template parameters.
+
+**Vulnerability Type**
+Integer underflow leading to out-of-bounds read.
+
+**Vulnerability Trigger**
+When `seg_flags & 1` is false (MMR=0) and `seg_flags & 6` is zero (GBTEMPLATE=0), `gbat_bytes` is set to 8. If `segment->data_length` is exactly 18, the check `if (18 + gbat_bytes > segment->data_length)` passes (18+8=26 > 18), but the subsequent `memcpy(gbat, segment_data + 18, gbat_bytes)` reads 8 bytes from an offset of 18, exceeding the segment data bounds (since data_length is only 18). This causes an out-of-bounds read.
+
+**Risky API or Data Flow**
+- `memcpy(gbat, segment_data + 18, gbat_bytes)` with insufficient bounds validation.
+- The condition `if (18 + gbat_bytes > segment->data_length)` fails to catch the case where `segment->data_length` is less than `18 + gbat_bytes`, but the code proceeds because the check uses `>` instead of `>=`. If `segment->data_length` is 18, 26 > 18 is true, so it returns an error. However, if the check were incorrectly implemented or bypassed, the memcpy would trigger. In the given code, the check is correct for triggering the error, but the vulnerability exists if the error return is bypassed or in a similar pattern. The actual bug is that the check uses `>` instead of `>=`, so when `segment->data_length` equals `18 + gbat_bytes`, it does not return an error, but the memcpy reads exactly to the end? Let's verify: If `segment->data_length` is 26, then `18 + gbat_bytes` (26) is not greater than 26, so the check fails and memcpy proceeds with 8 bytes from offset 18, which is within bounds (since data_length is 26). So the check is correct for preventing overflow. The described integer underflow is not present. Wait, re-examining: The vulnerability trigger states integer underflow, but the code shows an out-of-bounds read if the check is insufficient. Actually, the bug is that when `seg_flags & 6` is zero, `gbat_bytes` is set to 8, but the check `if (18 + gbat_bytes > segment->data_length)` uses `>`, which means if `segment->data_length` is less than or equal to 26, it triggers an error? For example, if `segment->data_length` is 25, then 26 > 25 is true, so it returns an error, safe. If `segment->data_length` is 26, then 26 > 26 is false, so it proceeds with memcpy for 8 bytes from offset 18, which is valid (indices 18 to 25). So no bug here. However, the initial condition `if (segment->data_length < 18)` catches very short segments. The real bug might be elsewhere. Let's read the provided code more carefully: There is an integer underflow in the offset calculation for the MMR decoding path? Look at `segment->data_length - offset` when `offset` is 18 + gbat_bytes. If `gbat_bytes` is large and `segment->data_length` is small, this subtraction could underflow, but it's used only if params.MMR is true. In the MMR path, `code = jbig2_decode_generic_mmr(ctx, segment, &params, segment_data + offset, segment->data_length - offset, image);`. Here, `offset` is computed as `18 + gbat_bytes`. If `gbat_bytes` is set based on seg_flags, but the segment data might not have that many bytes, the offset could be beyond `segment->data_length`, causing `segment->data_length - offset` to be negative, which is interpreted as a large unsigned value (since it's an int, but used as size_t in memcpy inside jbig2_decode_generic_mmr?). Actually, `segment->data_length` and `offset` are both int, so the subtraction yields a negative int, which is then passed as a size argument to jbig2_decode_generic_mmr, which likely expects a size_t. This could cause a huge memory read. So the vulnerability is an integer underflow in the MMR path when `segment->data_length` is less than `offset`. The check `if (18 + gbat_bytes > segment->data_length)` only applies when `!(seg_flags & 1)` (MMR=0). For MMR=1, that check is skipped, so `offset` can be larger than `segment->data_length`, leading to underflow.
+
+**Risky API or Data Flow**
+- Computation `segment->data_length - offset` without validation when `params.MMR` is true.
+- Passing a potentially negative integer as a size argument to `jbig2_decode_generic_mmr`.
+
+**Mutation Suggestions**
+- Vary the segment data length to be less than 18 + gbat_bytes when MMR=1.
+- Set seg_flags such that MMR=1 and GBTEMPLATE is non-zero (triggering warning but not affecting flow).
+- Adjust gbat_bytes based on seg_flags without proper bounds for MMR path.
+- Manipulate the offset calculation to cause integer underflow in the subtraction.
+- Target the memcpy in the non-MMR path with insufficient bounds check (if check is altered).
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int parse_audio_frame_header(AudioContext *ctx, const uint8_t *data, size_t data_len) {
+    AudioFrameHeader hdr;
+    uint8_t flags;
+    int ext_len = 0;
+    int offset;
+
+    if (data_len < 12) {
+        return ERR_INVALID_HEADER;
+    }
+
+    memcpy(&hdr, data, 12);
+    flags = data[11];
+
+    if (flags & 0x01) {
+        // Extended mode
+        if (data_len < 14) {
+            return ERR_INVALID_HEADER;
+        }
+        ext_len = data[12] | (data[13] << 8);
+        if (ext_len > 1024) {
+            return ERR_INVALID_EXTENSION;
+        }
+        offset = 14 + ext_len;
+    } else {
+        offset = 12;
+    }
+
+    // Process audio data
+    if (flags & 0x02) {
+        // Compressed audio path
+        size_t audio_len = data_len - offset;  // Integer underflow when offset > data_len
+        return decode_compressed_audio(ctx, data + offset, audio_len);
+    } else {
+        // Raw audio path
+        return process_raw_audio(ctx, data + offset, data_len - offset);
+    }
+}
+```
+
+```c
+int parse_network_packet(NetworkParser *parser, const uint8_t *packet, uint16_t packet_len) {
+    PacketHeader hdr;
+    uint8_t options_count;
+    int options_size = 0;
+    int data_offset;
+
+    if (packet_len < sizeof(PacketHeader)) {
+        return PACKET_TOO_SHORT;
+    }
+
+    memcpy(&hdr, packet, sizeof(PacketHeader));
+    options_count = hdr.flags & 0x0F;
+
+    if (options_count > 0) {
+        options_size = options_count * 4;  // Each option is 4 bytes
+        if (sizeof(PacketHeader) + options_size > packet_len) {
+            return INVALID_OPTIONS;
+        }
+        data_offset = sizeof(PacketHeader) + options_size;
+    } else {
+        data_offset = sizeof(PacketHeader);
+    }
+
+    // Handle different packet types
+    if (hdr.type == PACKET_TYPE_ENCRYPTED) {
+        // Encrypted packets have an additional 8-byte IV
+        int iv_offset = data_offset;
+        int payload_offset = iv_offset + 8;
+        
+        // No validation that packet_len >= payload_offset
+        size_t payload_len = packet_len - payload_offset;  // Underflow if payload_offset > packet_len
+        return decrypt_and_process(parser, packet + iv_offset, 8, packet + payload_offset, payload_len);
+    }
+
+    return process_packet_data(parser, packet + data_offset, packet_len - data_offset);
+}
+```
+
+```c
+int decode_tile_data(ImageDecoder *dec, const uint8_t *tile_buf, uint32_t tile_size) {
+    TileHeader header;
+    uint8_t encoding_flags;
+    int palette_entries = 0;
+    int data_start;
+
+    if (tile_size < 8) {
+        return DECODE_ERROR;
+    }
+
+    memcpy(&header, tile_buf, 8);
+    encoding_flags = tile_buf[7];
+
+    if (encoding_flags & 0x10) {
+        // Has color palette
+        palette_entries = tile_buf[8];
+        if (palette_entries > 64) {
+            return INVALID_PALETTE;
+        }
+        data_start = 9 + palette_entries * 3;  // 3 bytes per palette entry
+    } else {
+        data_start = 8;
+    }
+
+    // Check if we have enough data for the header
+    if (data_start > tile_size) {
+        return DECODE_ERROR;
+    }
+
+    if (encoding_flags & 0x01) {
+        // RLE encoded
+        size_t encoded_size = tile_size - data_start;
+        return decode_rle_tile(dec, &header, tile_buf + data_start, encoded_size);
+    } else if (encoding_flags & 0x02) {
+        // LZW encoded - vulnerable path
+        // Missing validation for LZW dictionary size
+        int dict_size = (encoding_flags & 0x0C) >> 2;
+        int lzw_header_size = (dict_size > 0) ? 2 : 0;
+        int lzw_data_start = data_start + lzw_header_size;
+        
+        // Underflow when lzw_data_start > tile_size
+        size_t lzw_data_len = tile_size - lzw_data_start;
+        return decode_lzw_tile(dec, &header, tile_buf + data_start, lzw_data_len);
+    }
+
+    return decode_raw_tile(dec, &header, tile_buf + data_start, tile_size - data_start);
+}
+```
+
+```c
+int process_chunked_message(MessageProcessor *proc, const uint8_t *msg, uint32_t msg_len) {
+    MessageChunk chunk;
+    uint16_t chunk_hdr_len;
+    uint32_t data_len;
+    int total_processed = 0;
+
+    while (total_processed < msg_len) {
+        if (msg_len - total_processed < 4) {
+            return ERR_TRUNCATED_CHUNK;
+        }
+
+        memcpy(&chunk, msg + total_processed, 4);
+        chunk_hdr_len = 4;
+
+        if (chunk.flags & CHUNK_FLAG_EXTENDED) {
+            if (msg_len - total_processed < 6) {
+                return ERR_TRUNCATED_CHUNK;
+            }
+            chunk_hdr_len = 6;
+        }
+
+        data_len = chunk.data_length;
+        
+        // Integer underflow in boundary check
+        if (msg_len - total_processed - chunk_hdr_len < data_len) {
+            return ERR_INCOMPLETE_DATA;
+        }
+
+        // Process chunk data
+        int result = handle_chunk_data(proc, 
+                                      msg + total_processed + chunk_hdr_len,
+                                      data_len,
+                                      chunk.type);
+        if (result < 0) {
+            return result;
+        }
+
+        // Advance to next chunk - potential integer overflow in addition
+        total_processed += chunk_hdr_len + data_len;
+    }
+
+    return SUCCESS;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int parse_media_container(MediaParser *mp, const uint8_t *container, size_t container_len) {
+    ContainerHeader hdr;
+    uint8_t stream_flags;
+    int extension_size = 0;
+    size_t data_offset;
+
+    if (container_len < 16) {
+        return MP_ERR_TRUNCATED;
+    }
+
+    memcpy(&hdr, container, 16);
+    stream_flags = container[15];
+
+    if (stream_flags & 0x40) {
+        // Extended metadata present
+        if (container_len < 20) {
+            return MP_ERR_TRUNCATED;
+        }
+        extension_size = container[16] | (container[17] << 8);
+        if (extension_size > 512) {
+            return MP_ERR_METADATA_OVERSIZE;
+        }
+        data_offset = 20 + extension_size;
+    } else {
+        data_offset = 16;
+    }
+
+    // Process based on codec type
+    if (hdr.codec_id == CODEC_ENC_AES) {
+        // Encrypted stream with 16-byte IV prepended
+        size_t crypto_offset = data_offset;
+        size_t payload_offset = crypto_offset + 16;
+        
+        // Missing validation: payload_offset may exceed container_len
+        size_t ciphertext_len = container_len - payload_offset;  // Underflows when payload_offset > container_len
+        return mp_decrypt_aes_ctr(mp, container + crypto_offset, 16,
+                                  container + payload_offset, ciphertext_len);
+    }
+
+    return mp_process_raw_stream(mp, container + data_offset, container_len - data_offset);
+}
+```
+
+```c
+int decode_vector_glyph(FontRenderer *fr, const uint8_t *glyph_data, uint32_t glyph_len) {
+    GlyphHeader gh;
+    uint8_t render_flags;
+    int hinting_bytes = 0;
+    int contour_offset;
+
+    if (glyph_len < 10) {
+        return FR_ERR_GLYPH_CORRUPT;
+    }
+
+    memcpy(&gh, glyph_data, 10);
+    render_flags = glyph_data[9];
+
+    if (render_flags & 0x08) {
+        // Contains hinting instructions
+        hinting_bytes = glyph_data[10];
+        if (hinting_bytes > 128) {
+            return FR_ERR_HINTING_OVERSIZE;
+        }
+        contour_offset = 11 + hinting_bytes;
+    } else {
+        contour_offset = 10;
+    }
+
+    // Validate we have enough data for header
+    if (contour_offset > glyph_len) {
+        return FR_ERR_GLYPH_CORRUPT;
+    }
+
+    if (render_flags & 0x01) {
+        // Quadratic Bézier contours
+        size_t bezier_data_len = glyph_len - contour_offset;
+        return fr_render_quadratic_bezier(fr, &gh, glyph_data + contour_offset, bezier_data_len);
+    } else if (render_flags & 0x02) {
+        // Cubic Bézier with compression
+        // Missing validation for compression header
+        int comp_header_size = (render_flags & 0x04) ? 4 : 2;
+        int comp_data_start = contour_offset + comp_header_size;
+        
+        // Integer underflow when comp_data_start > glyph_len
+        size_t comp_data_len = glyph_len - comp_data_start;
+        return fr_decode_cubic_compressed(fr, &gh, glyph_data + contour_offset, comp_data_len);
+    }
+
+    return fr_render_simple_contours(fr, &gh, glyph_data + contour_offset, glyph_len - contour_offset);
+}
+```
+
+```c
+int process_protocol_frame(ProtocolHandler *ph, const uint8_t *frame, uint16_t frame_len) {
+    FrameHeader fh;
+    uint8_t options_field;
+    int tlv_count = 0;
+    int payload_start;
+
+    if (frame_len < sizeof(FrameHeader)) {
+        return PH_ERR_FRAME_TOO_SHORT;
+    }
+
+    memcpy(&fh, frame, sizeof(FrameHeader));
+    options_field = fh.control & 0x7F;
+
+    if (options_field & 0x20) {
+        // TLV options present
+        tlv_count = frame[sizeof(FrameHeader)];
+        if (tlv_count > 16) {
+            return PH_ERR_TOO_MANY_OPTIONS;
+        }
+        payload_start = sizeof(FrameHeader) + 1 + tlv_count * 3;  // Each TLV is 3 bytes
+    } else {
+        payload_start = sizeof(FrameHeader);
+    }
+
+    // Check for fragmentation
+    if (fh.control & 0x80) {
+        // Fragmented frame with 4-byte fragmentation header
+        int frag_header_start = payload_start;
+        int frag_payload_start = frag_header_start + 4;
+        
+        // No validation that frag_payload_start <= frame_len
+        size_t fragment_data_len = frame_len - frag_payload_start;  // Underflow possible
+        return ph_reassemble_fragment(ph, &fh, frame + frag_header_start, 4,
+                                      frame + frag_payload_start, fragment_data_len);
+    }
+
+    return ph_handle_complete_frame(ph, &fh, frame + payload_start, frame_len - payload_start);
+}
+```
+
+```c
+int decode_texture_block(GraphicsDecoder *gd, const uint8_t *block, size_t block_size) {
+    TextureBlockHeader tbh;
+    uint8_t format_flags;
+    int palette_size = 0;
+    size_t pixel_data_offset;
+
+    if (block_size < 12) {
+        return GD_ERR_BLOCK_TRUNCATED;
+    }
+
+    memcpy(&tbh, block, 12);
+    format_flags = block[11];
+
+    if (format_flags & 0x10) {
+        // Indexed color with palette
+        palette_size = block[12];
+        if (palette_size == 0 || palette_size > 256) {
+            return GD_ERR_INVALID_PALETTE;
+        }
+        pixel_data_offset = 13 + palette_size * 3;  // RGB entries
+    } else {
+        pixel_data_offset = 12;
+    }
+
+    // Validate header region fits
+    if (pixel_data_offset > block_size) {
+        return GD_ERR_BLOCK_TRUNCATED;
+    }
+
+    if (format_flags & 0x01) {
+        // DXT compressed format
+        size_t compressed_size = block_size - pixel_data_offset;
+        return gd_decompress_dxt(gd, &tbh, block + pixel_data_offset, compressed_size);
+    } else if (format_flags & 0x02) {
+        // ASTC compressed with variable block size
+        int block_dim = (format_flags & 0x0C) >> 2;
+        int astc_header_size = (block_dim > 0) ? 3 : 1;
+        size_t astc_data_start = pixel_data_offset + astc_header_size;
+        
+        // Integer underflow when astc_data_start > block_size
+        size_t astc_data_len = block_size - astc_data_start;
+        return gd_decode_astc(gd, &tbh, block + pixel_data_offset, astc_data_len);
+    }
+
+    return gd_decode_raw_rgba(gd, &tbh, block + pixel_data_offset, block_size - pixel_data_offset);
+}
+```
+

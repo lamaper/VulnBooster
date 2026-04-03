@@ -1,10 +1,11 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import time
 import urllib.error
 import urllib.request
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from tqdm import tqdm
 
@@ -27,6 +28,7 @@ def parse_args():
     parser.add_argument("--top-p", type=float, default=config.TOP_P, help="Top-p。")
     parser.add_argument("--max-output-tokens", type=int, default=config.MAX_OUTPUT_TOKENS, help="最大输出 token。")
     parser.add_argument("--request-interval", type=float, default=config.REQUEST_INTERVAL_SEC, help="每次请求之间的等待秒数。")
+    parser.add_argument("--workers", type=int, default=config.GEN_WORKERS, help="并发生成 worker 数，仅并发不同 seed。")
     parser.add_argument("--output-root", default=config.gen_output_root, help="生成文本输出目录。")
     parser.add_argument("--seed-path", default=config.origin_vul_data, help="漏洞种子 JSON 路径。")
     parser.add_argument("--resume", action="store_true", help="如果输出文件已存在则跳过，便于断点续跑。")
@@ -38,10 +40,7 @@ def ensure_dir(path: str):
 
 
 def get_output_path(output_root: str, index: int, file_name: str) -> str:
-    ensure_dir(output_root)
-    output_dir = os.path.join(output_root, str(index))
-    ensure_dir(output_dir)
-    return os.path.join(output_dir, file_name)
+    return os.path.join(output_root, str(index), file_name)
 
 
 def load_seed_data(seed_path: str) -> List[Dict]:
@@ -77,12 +76,27 @@ def request_openai_compatible(messages: List[Dict[str, str]], temperature: float
         method="POST",
     )
 
-    try:
-        with urllib.request.urlopen(request, timeout=config.REQUEST_TIMEOUT_SEC) as response:
-            resp_json = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"OpenAI-compatible 请求失败: {exc.code} {detail}") from exc
+    last_error = None
+    for attempt in range(config.REQUEST_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=config.REQUEST_TIMEOUT_SEC) as response:
+                resp_json = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            last_error = RuntimeError(f"OpenAI-compatible 请求失败: {exc.code} {detail}")
+            retryable = exc.code == 429 or 500 <= exc.code < 600
+            if not retryable or attempt >= config.REQUEST_RETRIES:
+                raise last_error from exc
+        except urllib.error.URLError as exc:
+            last_error = RuntimeError(f"OpenAI-compatible 网络请求失败: {exc}")
+            if attempt >= config.REQUEST_RETRIES:
+                raise last_error from exc
+
+        sleep_sec = config.REQUEST_BACKOFF_SEC * (attempt + 1)
+        time.sleep(sleep_sec)
+    else:
+        raise last_error or RuntimeError("OpenAI-compatible 请求失败")
 
     choices = resp_json.get("choices") or []
     if not choices:
@@ -109,6 +123,7 @@ def write_run_manifest(args, total_seeds: int):
         "limit": args.limit,
         "start_index": args.start_index,
         "num_variants": args.num_variants,
+        "workers": args.workers,
         "temperature": args.temperature,
         "top_p": args.top_p,
         "max_output_tokens": args.max_output_tokens,
@@ -119,6 +134,7 @@ def write_run_manifest(args, total_seeds: int):
 
 
 def write_transcript(output_path: str, item: Dict, sample_index: int, prompt_mode: str, turns: List[Dict[str, str]]):
+    ensure_dir(os.path.dirname(output_path))
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(f"System: {config.SYSTEM_PROMPT}\n")
         f.write(f"PromptMode: {prompt_mode}\n")
@@ -140,6 +156,38 @@ def write_transcript(output_path: str, item: Dict, sample_index: int, prompt_mod
                 f.write(message["content"].strip() + "\n\n")
 
 
+def process_one_sample(args, sample_index: int, item: Dict) -> Tuple[str, int, str]:
+    code_text = item.get("func", item.get("code", ""))
+    if not code_text or not code_text.strip():
+        return "empty", sample_index, "empty seed code"
+
+    file_name = item.get("file_name", f"vul_variant_{sample_index}.txt")
+    output_path = get_output_path(args.output_root, sample_index, file_name)
+    if args.resume and os.path.exists(output_path):
+        return "skipped", sample_index, output_path
+
+    messages: List[Dict[str, str]] = []
+    turns = build_turns(args.prompt_mode, code_text, args.num_variants)
+
+    try:
+        for turn in turns:
+            messages.append({"role": "user", "content": turn})
+            reply = request_llm(
+                messages=messages,
+                temperature=args.temperature,
+                top_p=args.top_p,
+                max_output_tokens=args.max_output_tokens,
+            )
+            messages.append({"role": "assistant", "content": reply})
+            if args.request_interval > 0:
+                time.sleep(args.request_interval)
+
+        write_transcript(output_path, item, sample_index, args.prompt_mode, messages)
+        return "ok", sample_index, output_path
+    except Exception as exc:
+        return "failed", sample_index, str(exc)
+
+
 def run_generation(args):
     print(f"正在加载漏洞种子数据: {args.seed_path}")
     data = load_seed_data(args.seed_path)
@@ -152,37 +200,35 @@ def run_generation(args):
     selected = data[start:end]
     print(f"当前生成模式: {args.prompt_mode} -> {PROMPT_MODE_DESCRIPTIONS[args.prompt_mode]}")
     print(f"计划处理区间: [{start}, {end})，共 {len(selected)} 条。")
+    workers = max(1, args.workers)
+    print(f"并发 worker 数: {workers}")
 
-    for local_index, item in enumerate(tqdm(selected, desc="生成漏洞变体")):
-        sample_index = start + local_index
-        code_text = item.get("func", item.get("code", ""))
-        if not code_text or not code_text.strip():
-            continue
+    tasks = [(start + local_index, item) for local_index, item in enumerate(selected)]
+    stats = {"ok": 0, "failed": 0, "skipped": 0, "empty": 0}
 
-        file_name = item.get("file_name", f"vul_variant_{sample_index}.txt")
-        output_path = get_output_path(args.output_root, sample_index, file_name)
-        if args.resume and os.path.exists(output_path):
-            continue
+    if workers == 1:
+        iterator = (process_one_sample(args, sample_index, item) for sample_index, item in tasks)
+    else:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        futures = [executor.submit(process_one_sample, args, sample_index, item) for sample_index, item in tasks]
+        iterator = (future.result() for future in as_completed(futures))
 
-        messages: List[Dict[str, str]] = []
-        turns = build_turns(args.prompt_mode, code_text, args.num_variants)
+    try:
+        for status, sample_index, detail in tqdm(iterator, total=len(tasks), desc="生成漏洞变体"):
+            stats[status] += 1
+            if status == "failed":
+                print(f"\n处理第 {sample_index} 条样本失败: {detail}")
+    finally:
+        if workers > 1:
+            executor.shutdown(wait=True)
 
-        try:
-            for turn in turns:
-                messages.append({"role": "user", "content": turn})
-                reply = request_llm(
-                    messages=messages,
-                    temperature=args.temperature,
-                    top_p=args.top_p,
-                    max_output_tokens=args.max_output_tokens,
-                )
-                messages.append({"role": "assistant", "content": reply})
-                if args.request_interval > 0:
-                    time.sleep(args.request_interval)
-
-            write_transcript(output_path, item, sample_index, args.prompt_mode, messages)
-        except Exception as exc:
-            print(f"\n处理第 {sample_index} 条样本失败: {exc}")
+    print(
+        "生成完成统计: "
+        f"成功 {stats['ok']} | "
+        f"跳过 {stats['skipped']} | "
+        f"空样本 {stats['empty']} | "
+        f"失败 {stats['failed']}"
+    )
 
 
 if __name__ == "__main__":

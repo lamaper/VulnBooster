@@ -1,0 +1,465 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 16
+SeedId: unknown
+SeedFile: vul_variant_16.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+Jbig2Segment * jbig2_parse_segment_header ( Jbig2Ctx * ctx , uint8_t * buf , size_t buf_size , size_t * p_header_size ) {
+ Jbig2Segment * result ;
+ uint8_t rtscarf ;
+ uint32_t rtscarf_long ;
+ uint32_t * referred_to_segments ;
+ int referred_to_segment_count ;
+ int referred_to_segment_size ;
+ int pa_size ;
+ int offset ;
+ if ( buf_size < 11 ) return NULL ;
+ result = jbig2_new ( ctx , Jbig2Segment , 1 ) ;
+ if ( result == NULL ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , - 1 , "failed to allocate segment in jbig2_parse_segment_header" ) ;
+ return result ;
+ }
+ result -> number = jbig2_get_uint32 ( buf ) ;
+ result -> flags = buf [ 4 ] ;
+ rtscarf = buf [ 5 ] ;
+ if ( ( rtscarf & 0xe0 ) == 0xe0 ) {
+ rtscarf_long = jbig2_get_uint32 ( buf + 5 ) ;
+ referred_to_segment_count = rtscarf_long & 0x1fffffff ;
+ offset = 5 + 4 + ( referred_to_segment_count + 1 ) / 8 ;
+ }
+ else {
+ referred_to_segment_count = ( rtscarf >> 5 ) ;
+ offset = 5 + 1 ;
+ }
+ result -> referred_to_segment_count = referred_to_segment_count ;
+ referred_to_segment_size = result -> number <= 256 ? 1 : result -> number <= 65536 ? 2 : 4 ;
+ pa_size = result -> flags & 0x40 ? 4 : 1 ;
+ if ( offset + referred_to_segment_count * referred_to_segment_size + pa_size + 4 > buf_size ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , result -> number , "jbig2_parse_segment_header() called with insufficient data" , - 1 ) ;
+ jbig2_free ( ctx -> allocator , result ) ;
+ return NULL ;
+ }
+ if ( referred_to_segment_count ) {
+ int i ;
+ referred_to_segments = jbig2_new ( ctx , uint32_t , referred_to_segment_count * referred_to_segment_size ) ;
+ if ( referred_to_segments == NULL ) {
+ jbig2_error ( ctx , JBIG2_SEVERITY_FATAL , - 1 , "could not allocate referred_to_segments " "in jbig2_parse_segment_header" ) ;
+ return NULL ;
+ }
+ for ( i = 0 ;
+ i < referred_to_segment_count ;
+ i ++ ) {
+ referred_to_segments [ i ] = ( referred_to_segment_size == 1 ) ? buf [ offset ] : ( referred_to_segment_size == 2 ) ? jbig2_get_uint16 ( buf + offset ) : jbig2_get_uint32 ( buf + offset ) ;
+ offset += referred_to_segment_size ;
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , result -> number , "segment %d refers to segment %d" , result -> number , referred_to_segments [ i ] ) ;
+ }
+ result -> referred_to_segments = referred_to_segments ;
+ }
+ else {
+ result -> referred_to_segments = NULL ;
+ }
+ if ( result -> flags & 0x40 ) {
+ result -> page_association = jbig2_get_uint32 ( buf + offset ) ;
+ offset += 4 ;
+ }
+ else {
+ result -> page_association = buf [ offset ++ ] ;
+ }
+ jbig2_error ( ctx , JBIG2_SEVERITY_DEBUG , result -> number , "segment %d is associated with page %d" , result -> number , result -> page_association ) ;
+ result -> data_length = jbig2_get_uint32 ( buf + offset ) ;
+ * p_header_size = offset + 4 ;
+ result -> result = NULL ;
+ return result ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+Parsing a JBIG2 segment header from untrusted input with insufficient validation of arithmetic operations and memory allocation.
+
+- Vulnerability Type
+Integer overflow leading to buffer overflow or heap corruption.
+
+- Vulnerability Trigger
+When `referred_to_segment_count` is large, the calculation `referred_to_segment_count * referred_to_segment_size` may overflow, causing undersized allocation for `referred_to_segments`. Subsequent loop writes exceed allocated bounds.
+
+- Risky API or Data Flow
+Multiplication in `referred_to_segment_count * referred_to_segment_size` without overflow check before allocation via `jbig2_new`. The loop writes to `referred_to_segments` using the overflowed size.
+
+- Mutation Suggestions
+Modify arithmetic to trigger overflow with different segment sizes (1,2,4). Adjust `referred_to_segment_count` to exploit overflow, e.g., large count with size 4. Vary the segment number to change `referred_to_segment_size`. Alter the flags to affect `pa_size` and offset calculations.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static int parse_custom_header(Jbig2Ctx *ctx, uint8_t *data, size_t data_len, uint32_t *out_flags) {
+    uint32_t header_len;
+    uint16_t chunk_count;
+    uint8_t chunk_size;
+    uint32_t total_chunks_size;
+    uint8_t *chunk_data;
+
+    if (data_len < 8) return -1;
+
+    header_len = jbig2_get_uint32(data);
+    *out_flags = jbig2_get_uint32(data + 4);
+
+    if (header_len > data_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "header length exceeds buffer");
+        return -1;
+    }
+
+    if (header_len < 12) return 0;
+
+    chunk_count = jbig2_get_uint16(data + 8);
+    chunk_size = data[10];
+
+    total_chunks_size = chunk_count * chunk_size;
+    if (12 + total_chunks_size > header_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "chunk data exceeds header boundary");
+        return -1;
+    }
+
+    chunk_data = jbig2_new(ctx, uint8_t, total_chunks_size);
+    if (chunk_data == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate chunk data");
+        return -1;
+    }
+
+    memcpy(chunk_data, data + 12, total_chunks_size);
+    jbig2_free(ctx->allocator, chunk_data);
+
+    return 0;
+}
+```
+
+```c
+int decode_fragmented_stream(FragCtx *fctx, uint8_t *input, size_t input_len) {
+    uint32_t fragment_count;
+    uint16_t fragment_size;
+    uint32_t total_fragments_size;
+    Fragment *fragments;
+    int i;
+
+    if (input_len < 6) return -1;
+
+    fragment_count = jbig2_get_uint32(input);
+    fragment_size = jbig2_get_uint16(input + 4);
+
+    if (fragment_count == 0) return 0;
+
+    total_fragments_size = fragment_count * fragment_size;
+    if (6 + total_fragments_size > input_len) {
+        jbig2_error(fctx->ctx, JBIG2_SEVERITY_WARNING, -1, "insufficient data for fragments");
+        return -1;
+    }
+
+    fragments = jbig2_new(fctx->ctx, Fragment, fragment_count);
+    if (fragments == NULL) {
+        jbig2_error(fctx->ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate fragments");
+        return -1;
+    }
+
+    for (i = 0; i < fragment_count; i++) {
+        fragments[i].id = jbig2_get_uint16(input + 6 + i * fragment_size);
+        fragments[i].data = input + 6 + i * fragment_size + 2;
+    }
+
+    fctx->fragments = fragments;
+    fctx->count = fragment_count;
+    return 0;
+}
+```
+
+```c
+static int process_tile_table(Jbig2Ctx *ctx, uint8_t *table_data, size_t table_len, uint32_t *tile_offsets) {
+    uint32_t tile_count;
+    uint8_t offset_size;
+    uint32_t required_size;
+    int i;
+
+    if (table_len < 5) return -1;
+
+    tile_count = jbig2_get_uint32(table_data);
+    offset_size = table_data[4];
+
+    if (offset_size != 1 && offset_size != 2 && offset_size != 4) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "invalid offset size");
+        return -1;
+    }
+
+    required_size = 5 + tile_count * offset_size;
+    if (required_size > table_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "tile table truncated");
+        return -1;
+    }
+
+    for (i = 0; i < tile_count; i++) {
+        uint32_t offset;
+        if (offset_size == 1) {
+            offset = table_data[5 + i];
+        } else if (offset_size == 2) {
+            offset = jbig2_get_uint16(table_data + 5 + i * 2);
+        } else {
+            offset = jbig2_get_uint32(table_data + 5 + i * 4);
+        }
+        tile_offsets[i] = offset;
+    }
+
+    return tile_count;
+}
+```
+
+```c
+int parse_glyph_dictionary(DictCtx *dict, uint8_t *dict_data, size_t data_len) {
+    uint16_t glyph_count;
+    uint8_t glyph_size_type;
+    uint32_t glyph_size;
+    uint32_t total_glyph_data;
+    uint8_t *glyph_ptr;
+    int i;
+
+    if (data_len < 4) return -1;
+
+    glyph_count = jbig2_get_uint16(dict_data);
+    glyph_size_type = dict_data[2];
+
+    switch (glyph_size_type) {
+        case 0: glyph_size = 8; break;
+        case 1: glyph_size = 16; break;
+        case 2: glyph_size = 32; break;
+        default: return -1;
+    }
+
+    total_glyph_data = glyph_count * glyph_size;
+    if (3 + total_glyph_data > data_len) {
+        jbig2_error(dict->ctx, JBIG2_SEVERITY_INFO, -1, "glyph data exceeds buffer");
+        return -1;
+    }
+
+    dict->glyphs = jbig2_new(dict->ctx, Glyph, glyph_count);
+    if (dict->glyphs == NULL) {
+        jbig2_error(dict->ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate glyphs");
+        return -1;
+    }
+
+    glyph_ptr = dict_data + 3;
+    for (i = 0; i < glyph_count; i++) {
+        dict->glyphs[i].data = glyph_ptr;
+        glyph_ptr += glyph_size;
+    }
+
+    dict->count = glyph_count;
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static int parse_layer_descriptor(Jbig2Ctx *ctx, uint8_t *layer_buf, size_t buf_len, LayerDesc *desc) {
+    uint32_t layer_id;
+    uint16_t tile_count;
+    uint8_t tile_info_size;
+    uint32_t total_tile_info;
+    uint8_t *tile_info_ptr;
+    int i;
+
+    if (buf_len < 8) return -1;
+
+    layer_id = jbig2_get_uint32(layer_buf);
+    tile_count = jbig2_get_uint16(layer_buf + 4);
+    tile_info_size = layer_buf[6];
+
+    if (tile_info_size != 4 && tile_info_size != 8 && tile_info_size != 12) {
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, -1, "invalid tile info size");
+        return -1;
+    }
+
+    total_tile_info = tile_count * tile_info_size;
+    if (7 + total_tile_info > buf_len) {
+        jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, -1, "layer descriptor truncated");
+        return -1;
+    }
+
+    desc->tile_infos = jbig2_new(ctx, TileInfo, tile_count);
+    if (desc->tile_infos == NULL) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate tile infos");
+        return -1;
+    }
+
+    tile_info_ptr = layer_buf + 7;
+    for (i = 0; i < tile_count; i++) {
+        desc->tile_infos[i].x = jbig2_get_uint32(tile_info_ptr);
+        desc->tile_infos[i].y = jbig2_get_uint32(tile_info_ptr + 4);
+        if (tile_info_size >= 12) {
+            desc->tile_infos[i].flags = jbig2_get_uint32(tile_info_ptr + 8);
+        }
+        tile_info_ptr += tile_info_size;
+    }
+
+    desc->layer_id = layer_id;
+    desc->tile_count = tile_count;
+    return 0;
+}
+```
+
+```c
+int decode_pattern_table(PatternCtx *pctx, uint8_t *table, size_t table_len) {
+    uint32_t pattern_count;
+    uint8_t pattern_width, pattern_height;
+    uint32_t pattern_size;
+    uint32_t total_pattern_data;
+    uint8_t *pattern_data;
+    int i;
+
+    if (table_len < 6) return -1;
+
+    pattern_count = jbig2_get_uint32(table);
+    pattern_width = table[4];
+    pattern_height = table[5];
+
+    if (pattern_width == 0 || pattern_height == 0) {
+        jbig2_error(pctx->ctx, JBIG2_SEVERITY_WARNING, -1, "invalid pattern dimensions");
+        return -1;
+    }
+
+    pattern_size = ((pattern_width + 7) / 8) * pattern_height;
+    total_pattern_data = pattern_count * pattern_size;
+
+    if (6 + total_pattern_data > table_len) {
+        jbig2_error(pctx->ctx, JBIG2_SEVERITY_DEBUG, -1, "pattern table exceeds buffer");
+        return -1;
+    }
+
+    pctx->patterns = jbig2_new(pctx->ctx, Pattern, pattern_count);
+    if (pctx->patterns == NULL) {
+        jbig2_error(pctx->ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate patterns");
+        return -1;
+    }
+
+    pattern_data = table + 6;
+    for (i = 0; i < pattern_count; i++) {
+        pctx->patterns[i].data = pattern_data;
+        pattern_data += pattern_size;
+    }
+
+    pctx->count = pattern_count;
+    pctx->width = pattern_width;
+    pctx->height = pattern_height;
+    return 0;
+}
+```
+
+```c
+static int parse_region_hierarchy(RegionCtx *rctx, uint8_t *region_buf, size_t buf_len) {
+    uint16_t subregion_count;
+    uint8_t coord_size;
+    uint32_t subregion_data_size;
+    uint32_t total_subregion_data;
+    SubRegion *subregions;
+    int i;
+
+    if (buf_len < 4) return -1;
+
+    subregion_count = jbig2_get_uint16(region_buf);
+    coord_size = region_buf[2];
+
+    if (coord_size != 2 && coord_size != 4) {
+        jbig2_error(rctx->ctx, JBIG2_SEVERITY_WARNING, -1, "invalid coordinate size");
+        return -1;
+    }
+
+    subregion_data_size = 2 * coord_size + 1;
+    total_subregion_data = subregion_count * subregion_data_size;
+
+    if (3 + total_subregion_data > buf_len) {
+        jbig2_error(rctx->ctx, JBIG2_SEVERITY_INFO, -1, "region hierarchy data incomplete");
+        return -1;
+    }
+
+    subregions = jbig2_new(rctx->ctx, SubRegion, subregion_count);
+    if (subregions == NULL) {
+        jbig2_error(rctx->ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate subregions");
+        return -1;
+    }
+
+    uint8_t *data_ptr = region_buf + 3;
+    for (i = 0; i < subregion_count; i++) {
+        if (coord_size == 2) {
+            subregions[i].x = jbig2_get_uint16(data_ptr);
+            subregions[i].y = jbig2_get_uint16(data_ptr + 2);
+        } else {
+            subregions[i].x = jbig2_get_uint32(data_ptr);
+            subregions[i].y = jbig2_get_uint32(data_ptr + 4);
+        }
+        subregions[i].flags = data_ptr[2 * coord_size];
+        data_ptr += subregion_data_size;
+    }
+
+    rctx->subregions = subregions;
+    rctx->count = subregion_count;
+    return 0;
+}
+```
+
+```c
+int process_symbol_dictionary(SymbolDict *dict, uint8_t *sym_data, size_t data_len) {
+    uint32_t symbol_count;
+    uint8_t symbol_size_flag;
+    uint32_t symbol_data_size;
+    uint32_t total_symbol_data;
+    uint8_t *symbol_ptr;
+    int i;
+
+    if (data_len < 5) return -1;
+
+    symbol_count = jbig2_get_uint32(sym_data);
+    symbol_size_flag = sym_data[4];
+
+    switch (symbol_size_flag & 0x03) {
+        case 0: symbol_data_size = 16; break;
+        case 1: symbol_data_size = 32; break;
+        case 2: symbol_data_size = 64; break;
+        case 3: symbol_data_size = 128; break;
+        default: return -1;
+    }
+
+    total_symbol_data = symbol_count * symbol_data_size;
+    if (5 + total_symbol_data > data_len) {
+        jbig2_error(dict->ctx, JBIG2_SEVERITY_DEBUG, -1, "symbol dictionary truncated");
+        return -1;
+    }
+
+    dict->symbols = jbig2_new(dict->ctx, Symbol, symbol_count);
+    if (dict->symbols == NULL) {
+        jbig2_error(dict->ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate symbols");
+        return -1;
+    }
+
+    symbol_ptr = sym_data + 5;
+    for (i = 0; i < symbol_count; i++) {
+        dict->symbols[i].data = symbol_ptr;
+        dict->symbols[i].size = symbol_data_size;
+        symbol_ptr += symbol_data_size;
+    }
+
+    dict->count = symbol_count;
+    return 0;
+}
+```
+

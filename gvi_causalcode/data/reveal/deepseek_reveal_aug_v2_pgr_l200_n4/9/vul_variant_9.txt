@@ -1,0 +1,245 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 9
+SeedId: unknown
+SeedFile: vul_variant_9.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_decode_generic_mmr ( Jbig2Ctx * ctx , Jbig2Segment * segment , const Jbig2GenericRegionParams * params , const byte * data , size_t size , Jbig2Image * image ) {
+ Jbig2MmrCtx mmr ;
+ const int rowstride = image -> stride ;
+ byte * dst = image -> data ;
+ byte * ref = NULL ;
+ int y ;
+ int code = 0 ;
+ jbig2_decode_mmr_init ( & mmr , image -> width , image -> height , data , size ) ;
+ for ( y = 0 ;
+ y < image -> height ;
+ y ++ ) {
+ memset ( dst , 0 , rowstride ) ;
+ code = jbig2_decode_mmr_line ( & mmr , ref , dst ) ;
+ if ( code < 0 ) return code ;
+ ref = dst ;
+ dst += rowstride ;
+ }
+ return code ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Integer overflow leading to buffer overflow
+- Vulnerability Trigger: Multiplication of image->width and image->height may overflow when passed to jbig2_decode_mmr_init, causing insufficient buffer allocation in MMR context
+- Risky API or Data Flow: jbig2_decode_mmr_init uses width and height parameters to calculate buffer sizes; rowstride calculation may also overflow
+- Mutation Suggestions: Modify width/height values to trigger overflow in size calculations; manipulate image dimensions to cause integer wrap-around in stride or allocation computations
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int decode_compressed_tilemap(Jbig2Ctx *ctx, TilemapParams *params, const byte *data, size_t size, TilemapImage *image) {
+    Jbig2MmrCtx mmr;
+    const int rowstride = image->tile_width * sizeof(uint32_t);
+    byte *dst = image->tile_data;
+    byte *ref = NULL;
+    int y;
+    int code = 0;
+    
+    jbig2_decode_mmr_init(&mmr, image->tile_width, image->tile_height, data, size);
+    
+    for (y = 0; y < image->tile_height; y++) {
+        memset(dst, 0, rowstride);
+        code = jbig2_decode_mmr_line(&mmr, ref, dst);
+        if (code < 0) return code;
+        ref = dst;
+        dst += rowstride;
+    }
+    return code;
+}
+```
+
+```c
+int process_mmr_region(RegionDecoder *decoder, const RegionParams *params, const byte *input, size_t input_len, ImageBuffer *output) {
+    MMRContext mmr;
+    int stride = output->width * output->bpp / 8;
+    byte *current_line = output->pixels;
+    byte *reference_line = NULL;
+    int line;
+    int status = 0;
+    
+    mmr_decode_init(&mmr, output->width, output->height, input, input_len);
+    
+    for (line = 0; line < output->height; line++) {
+        memset(current_line, 0, stride);
+        status = mmr_decode_scanline(&mmr, reference_line, current_line);
+        if (status != MMR_SUCCESS) return status;
+        reference_line = current_line;
+        current_line += stride;
+    }
+    return status;
+}
+```
+
+```c
+int render_masked_surface(SurfaceContext *surf, const MaskParams *mask, const byte *mask_data, size_t mask_size, PixelBuffer *dest) {
+    MMRDecoder mmr;
+    int row_bytes = dest->pitch;
+    byte *target_row = dest->buffer;
+    byte *prev_row = NULL;
+    int row;
+    int err = 0;
+    
+    init_mmr_decoder(&mmr, dest->width, dest->height, mask_data, mask_size);
+    
+    for (row = 0; row < dest->height; row++) {
+        memset(target_row, 0xFF, row_bytes);
+        err = decode_mmr_row(&mmr, prev_row, target_row);
+        if (err < 0) break;
+        prev_row = target_row;
+        target_row += row_bytes;
+    }
+    return err;
+}
+```
+
+```c
+int decompress_bitmap_layer(LayerProcessor *proc, LayerSpec *spec, const byte *compressed, size_t comp_size, BitmapLayer *layer) {
+    MMRState mmr;
+    int scanline_size = layer->dimensions.x * ((layer->bpp + 7) / 8);
+    byte *scanline_ptr = layer->bitmap;
+    byte *context_line = NULL;
+    int scanline;
+    int result = 0;
+    
+    setup_mmr_decoding(&mmr, layer->dimensions.x, layer->dimensions.y, compressed, comp_size);
+    
+    for (scanline = 0; scanline < layer->dimensions.y; scanline++) {
+        memset(scanline_ptr, 0, scanline_size);
+        result = mmr_decode(&mmr, context_line, scanline_ptr);
+        if (result != DECODE_OK) return result;
+        context_line = scanline_ptr;
+        scanline_ptr += scanline_size;
+    }
+    return result;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int decode_mmr_region(RegionDecoder *dec, const RegionConfig *cfg, const uint8_t *input, size_t in_len, ImagePlane *plane) {
+    MMRDecState mmr;
+    int stride = plane->width * ((plane->depth + 7) >> 3);
+    uint8_t *cur = plane->pixels;
+    uint8_t *prev = NULL;
+    int line;
+    int ret = 0;
+
+    mmr_init(&mmr, plane->width, plane->height, input, in_len);
+
+    for (line = 0; line < plane->height; ++line) {
+        memset(cur, 0, stride);
+        ret = mmr_decode_line(&mmr, prev, cur);
+        if (ret < 0) goto cleanup;
+        prev = cur;
+        cur += stride;
+    }
+
+cleanup:
+    mmr_release(&mmr);
+    return ret;
+}
+```
+
+```c
+int inflate_masked_bitmap(BitmapContext *ctx, const MaskDescriptor *desc, const uint8_t *packed, size_t packed_sz, PixelGrid *grid) {
+    MMRHandle mh;
+    int row_len = grid->cols * sizeof(uint16_t);
+    uint8_t *row = grid->data;
+    uint8_t *ref = NULL;
+    uint32_t y;
+    int status = 0;
+
+    if (mmr_begin(&mh, grid->cols, grid->rows, packed, packed_sz) != MMR_OK)
+        return ERR_INIT;
+
+    for (y = 0; y < grid->rows; ++y) {
+        (void)memset(row, 0x00, row_len);
+        status = mmr_next(&mh, ref, row);
+        if (status != MMR_OK) {
+            mmr_end(&mh);
+            return status;
+        }
+        ref = row;
+        row += row_len;
+    }
+
+    mmr_end(&mh);
+    return status;
+}
+```
+
+```c
+int reconstruct_tiled_mmr(TileEngine *eng, const TileParams *tp, const uint8_t *cdata, size_t cdata_len, TileCanvas *canvas) {
+    MMRCtx mc;
+    int pitch = canvas->tile_w * canvas->bpp / 8;
+    uint8_t *dst = canvas->buf;
+    uint8_t *ctx = NULL;
+    int ty;
+    int rc = 0;
+
+    rc = mmr_setup(&mc, canvas->tile_w, canvas->tile_h, cdata, cdata_len);
+    if (rc) return rc;
+
+    for (ty = 0; ty < canvas->tile_h; ++ty) {
+        (void)memset(dst, 0xFF, pitch);
+        rc = mmr_emit_line(&mc, ctx, dst);
+        if (rc < 0) break;
+        ctx = dst;
+        dst += pitch;
+    }
+
+    mmr_teardown(&mc);
+    return rc;
+}
+```
+
+```c
+int decompress_mono_region(CodecState *cs, MonoRegionSpec *spec, const uint8_t *stream, size_t stream_sz, MonoBuffer *buf) {
+    struct mmr_decoder md;
+    int scan = buf->width >> 3;
+    uint8_t *ptr = buf->bits;
+    uint8_t *prior = NULL;
+    unsigned int row;
+    int err = 0;
+
+    mmr_decoder_prepare(&md, buf->width, buf->height, stream, stream_sz);
+
+    for (row = 0; row < buf->height; row++) {
+        (void)memset(ptr, 0, scan);
+        err = mmr_decoder_scan(&md, prior, ptr);
+        if (err) {
+            mmr_decoder_finish(&md);
+            return err;
+        }
+        prior = ptr;
+        ptr += scan;
+    }
+
+    mmr_decoder_finish(&md);
+    return err;
+}
+```
+

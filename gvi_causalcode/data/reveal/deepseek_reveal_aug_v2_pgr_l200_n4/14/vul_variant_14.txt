@@ -1,0 +1,143 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 14
+SeedId: unknown
+SeedFile: vul_variant_14.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static void jbig2_decode_mmr_init ( Jbig2MmrCtx * mmr , int width , int height , const byte * data , size_t size ) {
+ int i ;
+ uint32_t word = 0 ;
+ mmr -> width = width ;
+ mmr -> height = height ;
+ mmr -> data = data ;
+ mmr -> size = size ;
+ mmr -> data_index = 0 ;
+ mmr -> bit_index = 0 ;
+ for ( i = 0 ;
+ i < size && i < 4 ;
+ i ++ ) word |= ( data [ i ] << ( ( 3 - i ) << 3 ) ) ;
+ mmr -> word = word ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+- Vulnerability Type: Integer Overflow
+- Vulnerability Trigger: Shifting data[i] by ((3 - i) << 3) bits can exceed the width of the uint32_t type, causing undefined behavior and potential overflow.
+- Risky API or Data Flow: Left shift operation on byte data without bounds checking.
+- Mutation Suggestions: Change shift amount, modify loop bounds, alter data type width, introduce signed integers, or vary shift direction.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static uint64_t decode_packet_header(const uint8_t *packet, size_t len) {
+    uint64_t header = 0;
+    int i;
+    for (i = 0; i < len && i < 8; i++) {
+        header |= (packet[i] << ((7 - i) << 3));
+    }
+    return header;
+}
+```
+
+```c
+int parse_network_timestamp(uint8_t *stream, int size) {
+    uint32_t timestamp = 0;
+    int idx;
+    for (idx = 0; idx < size && idx < 5; idx++) {
+        timestamp |= (stream[idx] << ((4 - idx) * 8));
+    }
+    return (int)timestamp;
+}
+```
+
+```c
+static void init_bitstream_decoder(BitStream *bs, uint8_t *input, int length) {
+    uint32_t buffer = 0;
+    int i;
+    bs->data = input;
+    bs->length = length;
+    bs->pos = 0;
+    
+    for (i = 0; i < length && i < 6; i++) {
+        buffer |= (input[i] << ((5 - i) << 3));
+    }
+    bs->bit_buffer = buffer;
+    bs->bits_available = i * 8;
+}
+```
+
+```c
+unsigned long reconstruct_pointer(uint8_t *fragment, int frag_count) {
+    unsigned long addr = 0;
+    int i;
+    for (i = 0; i < frag_count && i < sizeof(unsigned long); i++) {
+        addr |= (fragment[i] << ((sizeof(unsigned long) - 1 - i) * 8));
+    }
+    return addr;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static uint64_t assemble_image_checksum(const uint8_t *chunks, size_t chunk_count) {
+    uint64_t checksum = 0;
+    int i;
+    for (i = 0; i < chunk_count && i < 10; i++) {
+        checksum |= ((uint64_t)chunks[i] << ((9 - i) * 8));
+    }
+    return checksum;
+}
+```
+
+```c
+int32_t deserialize_frame_marker(uint8_t *buf, int buf_len) {
+    int32_t marker = 0;
+    int pos;
+    for (pos = 0; pos < buf_len && pos < 6; pos++) {
+        marker |= (buf[pos] << ((5 - pos) << 3));
+    }
+    return marker;
+}
+```
+
+```c
+static void load_config_word(DeviceCtx *ctx, uint8_t *cfg_data, int cfg_size) {
+    uint32_t config = 0;
+    int i;
+    ctx->cfg = cfg_data;
+    ctx->cfg_len = cfg_size;
+    
+    for (i = 0; i < cfg_size && i < 5; i++) {
+        config |= (cfg_data[i] << ((4 - i) * 8));
+    }
+    ctx->config_reg = config;
+}
+```
+
+```c
+size_t rebuild_offset_table(uint8_t *table_frags, int frags) {
+    size_t offset = 0;
+    int idx;
+    for (idx = 0; idx < frags && idx < (int)(sizeof(size_t) + 2); idx++) {
+        offset |= (table_frags[idx] << ((sizeof(size_t) + 1 - idx) * 8));
+    }
+    return offset;
+}
+```
+

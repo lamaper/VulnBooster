@@ -1,0 +1,368 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 13
+SeedId: unknown
+SeedFile: vul_variant_13.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+int jbig2_decode_halftone_mmr ( Jbig2Ctx * ctx , const Jbig2GenericRegionParams * params , const byte * data , size_t size , Jbig2Image * image , size_t * consumed_bytes ) {
+ Jbig2MmrCtx mmr ;
+ const int rowstride = image -> stride ;
+ byte * dst = image -> data ;
+ byte * ref = NULL ;
+ int y ;
+ int code = 0 ;
+ const uint32_t EOFB = 0x001001 ;
+ jbig2_decode_mmr_init ( & mmr , image -> width , image -> height , data , size ) ;
+ for ( y = 0 ;
+ y < image -> height ;
+ y ++ ) {
+ memset ( dst , 0 , rowstride ) ;
+ code = jbig2_decode_mmr_line ( & mmr , ref , dst ) ;
+ if ( code < 0 ) return code ;
+ ref = dst ;
+ dst += rowstride ;
+ }
+ if ( mmr . word >> 8 == EOFB ) {
+ mmr . data_index += 3 ;
+ }
+ * consumed_bytes += mmr . data_index + ( mmr . bit_index >> 3 ) + ( mmr . bit_index > 0 ? 1 : 0 ) ;
+ return code ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+Decoding a JBIG2 halftone region using MMR (Modified Modified READ) compression, where the decoder processes compressed image data line by line.
+
+- Vulnerability Type
+Integer overflow leading to buffer overflow.
+
+- Vulnerability Trigger
+When `mmr.data_index` is large enough that adding 3 causes an integer wrap-around, or when the calculation of `*consumed_bytes` overflows due to large offset values.
+
+- Risky API or Data Flow
+The unchecked addition `mmr.data_index += 3` after EOFB check, and the subsequent arithmetic `*consumed_bytes += mmr.data_index + (mmr.bit_index >> 3) + (mmr.bit_index > 0 ? 1 : 0)` without overflow validation.
+
+- Mutation Suggestions
+Modify the integer overflow to occur through different arithmetic operations (e.g., multiplication, subtraction), change the vulnerable data type (e.g., from `int` to `size_t`), or shift the overflow to a different pointer or array index calculation.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+int decode_rle_stream (const uint8_t *input, size_t input_len, uint8_t *output, size_t output_len, size_t *bytes_used) {
+    const uint8_t *in_ptr = input;
+    uint8_t *out_ptr = output;
+    const uint8_t *end = input + input_len;
+    uint32_t total_consumed = 0;
+
+    while (in_ptr < end) {
+        uint8_t control = *in_ptr++;
+        total_consumed++;
+
+        if (control & 0x80) {
+            uint8_t run_length = control & 0x7F;
+            if (in_ptr >= end) return -1;
+            uint8_t value = *in_ptr++;
+            total_consumed++;
+            
+            if (out_ptr + run_length > output + output_len) return -1;
+            memset(out_ptr, value, run_length);
+            out_ptr += run_length;
+        } else {
+            uint8_t copy_len = control;
+            if (in_ptr + copy_len > end) return -1;
+            
+            if (out_ptr + copy_len > output + output_len) return -1;
+            memcpy(out_ptr, in_ptr, copy_len);
+            out_ptr += copy_len;
+            in_ptr += copy_len;
+            total_consumed += copy_len;
+        }
+    }
+
+    *bytes_used += total_consumed;  // Integer overflow if *bytes_used + total_consumed > SIZE_MAX
+    return 0;
+}
+```
+
+```c
+int parse_chunked_encoding(uint8_t *buffer, size_t buf_size, size_t *processed) {
+    uint8_t *ptr = buffer;
+    uint8_t *end = buffer + buf_size;
+    uint32_t chunk_size_total = 0;
+
+    while (ptr < end) {
+        char *size_end;
+        unsigned long chunk_size = strtoul((char*)ptr, &size_end, 16);
+        if ((uint8_t*)size_end == ptr) return -1;
+        
+        ptr = (uint8_t*)size_end;
+        if (*ptr != '\r') return -1;
+        ptr++;
+        if (ptr >= end || *ptr != '\n') return -1;
+        ptr++;
+
+        if (chunk_size == 0) {
+            if (ptr + 2 > end) return -1;
+            if (ptr[0] != '\r' || ptr[1] != '\n') return -1;
+            ptr += 2;
+            break;
+        }
+
+        if (ptr + chunk_size + 2 > end) return -1;
+        ptr += chunk_size;
+        
+        if (ptr[0] != '\r' || ptr[1] != '\n') return -1;
+        ptr += 2;
+        
+        chunk_size_total += chunk_size + (ptr - size_end);  // May overflow with many chunks
+    }
+
+    *processed += (ptr - buffer) + chunk_size_total;  // Integer overflow in combined addition
+    return 0;
+}
+```
+
+```c
+int inflate_bitstream(const uint8_t *compressed, size_t comp_len, uint8_t *decompressed, size_t *decomp_len, size_t *consumed) {
+    bitstream_t bs;
+    uint32_t bits_accumulated = 0;
+    size_t out_pos = 0;
+    
+    init_bitstream(&bs, compressed, comp_len);
+    
+    while (!bitstream_eof(&bs) && out_pos < *decomp_len) {
+        uint32_t code = read_bits(&bs, 9);
+        bits_accumulated += 9;
+        
+        if (code == 0x1FF) {  // Special marker
+            uint32_t marker_param = read_bits(&bs, 7);
+            bits_accumulated += 7;
+            
+            if (marker_param == 0x7F) {
+                size_t skip = read_bits(&bs, 16);
+                bits_accumulated += 16;
+                skip_bits(&bs, skip);
+                bits_accumulated += skip;  // May overflow with large skip values
+            }
+            continue;
+        }
+        
+        uint8_t decoded = huffman_decode(code);
+        decompressed[out_pos++] = decoded;
+    }
+    
+    size_t total_bits = bits_accumulated;
+    *consumed += (total_bits / 8) + ((total_bits % 8) ? 1 : 0);  // Integer overflow in byte calculation
+    *decomp_len = out_pos;
+    return 0;
+}
+```
+
+```c
+int decode_progressive_scan(const uint8_t *scan_data, size_t scan_size, uint16_t *coeffs, size_t num_coeffs, size_t *bytes_read) {
+    const uint8_t *ptr = scan_data;
+    const uint8_t *end = scan_data + scan_size;
+    uint32_t coeff_index = 0;
+    uint32_t bit_counter = 0;
+
+    while (ptr < end && coeff_index < num_coeffs) {
+        uint8_t byte = *ptr++;
+        bit_counter += 8;
+        
+        if (byte == 0xFF) {
+            if (ptr >= end) return -1;
+            uint8_t next = *ptr++;
+            bit_counter += 8;
+            
+            if (next == 0x00) {
+                // Valid byte-stuffed 0xFF
+                uint8_t run_length = *ptr++;
+                bit_counter += 8;
+                coeff_index += run_length;
+            } else if (next >= 0xD0 && next <= 0xD7) {
+                // Restart marker
+                uint16_t restart_interval = (ptr[0] << 8) | ptr[1];
+                ptr += 2;
+                bit_counter += 16;
+                coeff_index += restart_interval * 64;  // May overflow with large intervals
+            }
+            continue;
+        }
+        
+        int16_t value = (int8_t)byte;
+        coeffs[coeff_index++] = value;
+    }
+
+    size_t total_bytes = (bit_counter / 8) + ((bit_counter % 8) ? 1 : 0);
+    *bytes_read += total_bytes + (ptr - scan_data);  // Double addition may overflow
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+int decode_rle_stream(const uint8_t *input, size_t input_len, uint8_t *output, size_t output_len, size_t *bytes_used) {
+    const uint8_t *in_ptr = input;
+    uint8_t *out_ptr = output;
+    const uint8_t *end = input + input_len;
+    uint32_t total_consumed = 0;
+
+    while (in_ptr < end) {
+        uint8_t control = *in_ptr++;
+        total_consumed++;
+
+        if (control & 0x80) {
+            uint8_t run_length = control & 0x7F;
+            if (in_ptr >= end) return -1;
+            uint8_t value = *in_ptr++;
+            total_consumed++;
+            
+            if (out_ptr + run_length > output + output_len) return -1;
+            memset(out_ptr, value, run_length);
+            out_ptr += run_length;
+        } else {
+            uint8_t copy_len = control;
+            if (in_ptr + copy_len > end) return -1;
+            
+            if (out_ptr + copy_len > output + output_len) return -1;
+            memcpy(out_ptr, in_ptr, copy_len);
+            out_ptr += copy_len;
+            in_ptr += copy_len;
+            total_consumed += copy_len;
+        }
+    }
+
+    *bytes_used += total_consumed;  // Integer overflow if *bytes_used + total_consumed > SIZE_MAX
+    return 0;
+}
+```
+
+```c
+int parse_chunked_transfer(uint8_t *data, size_t data_len, size_t *processed_total) {
+    uint8_t *ptr = data;
+    uint8_t *end = data + data_len;
+    uint32_t chunk_bytes = 0;
+
+    while (ptr < end) {
+        char *len_end;
+        unsigned long chunk_size = strtoul((char*)ptr, &len_end, 16);
+        if ((uint8_t*)len_end == ptr) return -1;
+        
+        ptr = (uint8_t*)len_end;
+        if (ptr >= end || *ptr != '\r') return -1;
+        ptr++;
+        if (ptr >= end || *ptr != '\n') return -1;
+        ptr++;
+
+        if (chunk_size == 0) {
+            if (ptr + 2 > end) return -1;
+            if (ptr[0] != '\r' || ptr[1] != '\n') return -1;
+            ptr += 2;
+            break;
+        }
+
+        if (ptr + chunk_size + 2 > end) return -1;
+        ptr += chunk_size;
+        
+        if (ptr[0] != '\r' || ptr[1] != '\n') return -1;
+        ptr += 2;
+        
+        chunk_bytes += chunk_size + (ptr - len_end);  // May overflow with many/large chunks
+    }
+
+    *processed_total += (ptr - data) + chunk_bytes;  // Integer overflow in combined addition
+    return 0;
+}
+```
+
+```c
+int inflate_bitstream(const uint8_t *compressed, size_t comp_len, uint8_t *decompressed, size_t *decomp_len, size_t *consumed) {
+    bitstream_t bs;
+    uint32_t bits_accumulated = 0;
+    size_t out_pos = 0;
+    
+    init_bitstream(&bs, compressed, comp_len);
+    
+    while (!bitstream_eof(&bs) && out_pos < *decomp_len) {
+        uint32_t code = read_bits(&bs, 9);
+        bits_accumulated += 9;
+        
+        if (code == 0x1FF) {
+            uint32_t marker_param = read_bits(&bs, 7);
+            bits_accumulated += 7;
+            
+            if (marker_param == 0x7F) {
+                size_t skip = read_bits(&bs, 16);
+                bits_accumulated += 16;
+                skip_bits(&bs, skip);
+                bits_accumulated += skip;  // May overflow with large skip values
+            }
+            continue;
+        }
+        
+        uint8_t decoded = huffman_decode(code);
+        decompressed[out_pos++] = decoded;
+    }
+    
+    size_t total_bits = bits_accumulated;
+    *consumed += (total_bits / 8) + ((total_bits % 8) ? 1 : 0);  // Integer overflow in byte calculation
+    *decomp_len = out_pos;
+    return 0;
+}
+```
+
+```c
+int decode_progressive_scan(const uint8_t *scan_data, size_t scan_size, uint16_t *coeffs, size_t num_coeffs, size_t *bytes_read) {
+    const uint8_t *ptr = scan_data;
+    const uint8_t *end = scan_data + scan_size;
+    uint32_t coeff_index = 0;
+    uint32_t bit_counter = 0;
+
+    while (ptr < end && coeff_index < num_coeffs) {
+        uint8_t byte = *ptr++;
+        bit_counter += 8;
+        
+        if (byte == 0xFF) {
+            if (ptr >= end) return -1;
+            uint8_t next = *ptr++;
+            bit_counter += 8;
+            
+            if (next == 0x00) {
+                uint8_t run_length = *ptr++;
+                bit_counter += 8;
+                coeff_index += run_length;
+            } else if (next >= 0xD0 && next <= 0xD7) {
+                uint16_t restart_interval = (ptr[0] << 8) | ptr[1];
+                ptr += 2;
+                bit_counter += 16;
+                coeff_index += restart_interval * 64;  // May overflow with large intervals
+            }
+            continue;
+        }
+        
+        int16_t value = (int8_t)byte;
+        coeffs[coeff_index++] = value;
+    }
+
+    size_t total_bytes = (bit_counter / 8) + ((bit_counter % 8) ? 1 : 0);
+    *bytes_read += total_bytes + (ptr - scan_data);  // Double addition may overflow
+    return 0;
+}
+```
+

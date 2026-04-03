@@ -1,0 +1,212 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 26
+SeedId: unknown
+SeedFile: vul_variant_26.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  Inline stack manipulation functions for generic containers in OpenSSL, using macro-based type substitution for stack-of-type abstractions, which may lead to type confusion or incorrect pointer casting.
+
+- Vulnerability Type
+  Type confusion due to unsafe pointer casting and macro expansion, potentially causing memory corruption or incorrect comparisons.
+
+- Vulnerability Trigger
+  Invocation of stack functions (e.g., `sk_set`, `sk_find`, `sk_deep_copy`) with mismatched or incorrectly typed pointers, exacerbated by the use of `OPENSSL_sk_*` functions that operate on raw `void*` pointers without adequate type checking.
+
+- Risky API or Data Flow
+  The `OPENSSL_sk_set`, `OPENSSL_sk_find`, `OPENSSL_sk_deep_copy` functions and their wrapper macros, which cast pointers to and from `const void*` and specific types (`t2*`) without validation, risking misalignment or size mismatches.
+
+- Mutation Suggestions
+  Modify pointer types in macro definitions (e.g., change `t2*` to `t1*` or vice versa), alter const qualifiers, introduce incorrect casting in wrapper functions, or adjust the macro expansion to produce mismatched function signatures.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static ossl_inline void *sk_##type##_unsafe_get(const STACK_OF(type) *sk, int idx) {
+    if (idx < 0 || idx >= OPENSSL_sk_num((const OPENSSL_STACK *)sk)) {
+        return NULL;
+    }
+    // Vulnerability: Returns void* instead of type*, causing type confusion
+    return OPENSSL_sk_value((const OPENSSL_STACK *)sk, idx);
+}
+
+static ossl_inline int sk_##type##_bad_insert(STACK_OF(type) *sk, void *elem, int idx) {
+    // Vulnerability: elem is void* instead of type*, but cast to const void* without type checking
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)elem, idx);
+}
+
+static ossl_inline STACK_OF(type) *sk_##type##_shallow_copy_mismatch(const STACK_OF(type) *sk) {
+    // Vulnerability: Uses OPENSSL_sk_dup which copies void* pointers, but returns STACK_OF(type)*
+    // This may cause issues if the original stack contained differently sized elements
+    return (STACK_OF(type) *)OPENSSL_sk_dup((const OPENSSL_STACK *)sk);
+}
+
+static ossl_inline int sk_##type##_compare_mismatch(const void *a, const void *b) {
+    // Vulnerability: Assumes both pointers point to 'type' objects, but no type enforcement
+    // Could compare mismatched types if used with incorrectly typed stack
+    const type *ta = (const type *)a;
+    const type *tb = (const type *)b;
+    return (*ta < *tb) ? -1 : (*ta > *tb);
+}
+```
+
+```c
+static ossl_inline int sk_##t1##_push_mismatched(STACK_OF(t1) *sk, t2 *ptr) {
+    // Vulnerability: Pushes t2* pointer into stack expecting t1* elements
+    // Type confusion when elements are later accessed as t1*
+    return OPENSSL_sk_push((OPENSSL_STACK *)sk, (const void *)ptr);
+}
+
+static ossl_inline t2 *sk_##t1##_pop_unsafe(STACK_OF(t1) *sk) {
+    // Vulnerability: Returns t2* but stack contains t1* elements
+    // Unsafe cast that assumes t1 and t2 have compatible memory layouts
+    return (t2 *)OPENSSL_sk_pop((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline void sk_##t1##_zeroize_bad(STACK_OF(t1) *sk) {
+    // Vulnerability: Treats stack elements as raw bytes regardless of actual type
+    // Could cause issues with non-trivial destructors or reference-counted objects
+    OPENSSL_sk_zero((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline int sk_##t1##_find_ptr_mismatch(STACK_OF(t1) *sk, const void *ptr) {
+    // Vulnerability: Searches for arbitrary void* pointer in typed stack
+    // May find incorrect matches due to pointer comparison without type consideration
+    return OPENSSL_sk_find((OPENSSL_STACK *)sk, ptr);
+}
+```
+
+```c
+static ossl_inline STACK_OF(t1)* sk_##t1##_new_mismatched(sk_##t1##_compfunc compare) {
+    // Vulnerability: Creates stack for t1 but uses comparison function that might expect t2
+    // Type confusion in comparison callbacks
+    return (STACK_OF(t1)*)OPENSSL_sk_new((OPENSSL_sk_compfunc)compare);
+}
+
+static ossl_inline void sk_##t1##_free_all_unsafe(STACK_OF(t1) *sk) {
+    // Vulnerability: Frees stack without calling proper destructor for elements
+    // Assumes all elements are simple types or already managed elsewhere
+    OPENSSL_sk_free((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline t1** sk_##t1##_get_array_bad(const STACK_OF(t1) *sk) {
+    // Vulnerability: Exposes internal array as t1** without const correctness
+    // Callers may modify elements thinking they have mutable access
+    return (t1**)OPENSSL_sk_num((const OPENSSL_STACK *)sk) > 0 ? 
+           (t1**)OPENSSL_sk_value((const OPENSSL_STACK *)sk, 0) : NULL;
+}
+
+static ossl_inline int sk_##t1##_set_cmp_mismatch(STACK_OF(t1) *sk, sk_##t2##_compfunc compare) {
+    // Vulnerability: Sets comparison function for t1 stack using t2 comparator
+    // Type mismatch in comparator parameters
+    return OPENSSL_sk_set_cmp_func((OPENSSL_STACK *)sk, (OPENSSL_sk_compfunc)compare);
+}
+```
+
+```c
+static ossl_inline size_t sk_##type##_element_size(const STACK_OF(type) *sk) {
+    // Vulnerability: Assumes all elements have sizeof(type), but stack may contain derived types
+    // Incorrect size assumption for polymorphic or inherited types
+    return sizeof(type);
+}
+
+static ossl_inline int sk_##type##_binary_search_unsafe(const STACK_OF(type) *sk, const void *key) {
+    // Vulnerability: Performs binary search on potentially unsorted stack
+    // Also uses void* key without ensuring it points to type-compatible data
+    return OPENSSL_sk_find_ex((const OPENSSL_STACK *)sk, key);
+}
+
+static ossl_inline void sk_##type##_reverse_in_place(STACK_OF(type) *sk) {
+    // Vulnerability: Reverses stack in-place without considering element ownership
+    // May break invariants if elements have specific order dependencies
+    OPENSSL_sk_reverse((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline STACK_OF(type)* sk_##type##_from_array_bad(type *array, size_t count) {
+    // Vulnerability: Creates stack from array without copying elements
+    // Stack will attempt to free array elements when destroyed, causing double-free
+    STACK_OF(type) *sk = OPENSSL_sk_new_null();
+    for (size_t i = 0; i < count; i++) {
+        OPENSSL_sk_push((OPENSSL_STACK *)sk, (const void *)&array[i]);
+    }
+    return sk;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static ossl_inline BIO *sk_X509_unsafe_get(const STACK_OF(X509) *sk, int idx) {
+    if (idx < 0 || idx >= OPENSSL_sk_num((const OPENSSL_STACK *)sk)) {
+        return NULL;
+    }
+    // Vulnerability: Returns BIO* instead of X509*, causing type confusion
+    // This assumes BIO and X509 pointers are interchangeable, which they are not
+    return (BIO *)OPENSSL_sk_value((const OPENSSL_STACK *)sk, idx);
+}
+
+static ossl_inline int sk_EVP_PKEY_push_mismatched(STACK_OF(EVP_PKEY) *sk, RSA *rsa_key) {
+    // Vulnerability: Pushes RSA* pointer into stack expecting EVP_PKEY* elements
+    // Type confusion when elements are later accessed as EVP_PKEY*
+    return OPENSSL_sk_push((OPENSSL_STACK *)sk, (const void *)rsa_key);
+}
+
+static ossl_inline STACK_OF(ASN1_OBJECT)* sk_ASN1_OBJECT_shallow_copy_mismatch(const STACK_OF(ASN1_OBJECT) *sk) {
+    // Vulnerability: Uses OPENSSL_sk_dup which copies void* pointers
+    // If original stack contained derived types, the copy will have incorrect type information
+    return (STACK_OF(ASN1_OBJECT)*)OPENSSL_sk_dup((const OPENSSL_STACK *)sk);
+}
+
+static ossl_inline int sk_X509_NAME_compare_mismatch(const void *a, const void *b) {
+    // Vulnerability: Assumes both pointers point to X509_NAME objects
+    // Could be used with stack containing X509_NAME_ENTRY objects
+    const X509_NAME *na = (const X509_NAME *)a;
+    const X509_NAME *nb = (const X509_NAME *)b;
+    return X509_NAME_cmp(na, nb);
+}
+```
+

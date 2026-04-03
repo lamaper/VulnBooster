@@ -17,6 +17,9 @@ TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
 MAX_OUTPUT_TOKENS = int(os.getenv("GEN_MAX_OUTPUT_TOKENS", "4096"))
 REQUEST_INTERVAL_SEC = float(os.getenv("GEN_REQUEST_INTERVAL_SEC", "0"))
 REQUEST_TIMEOUT_SEC = int(os.getenv("GEN_REQUEST_TIMEOUT_SEC", "180"))
+GEN_WORKERS = int(os.getenv("GEN_WORKERS", "1"))
+REQUEST_RETRIES = int(os.getenv("GEN_REQUEST_RETRIES", "3"))
+REQUEST_BACKOFF_SEC = float(os.getenv("GEN_REQUEST_BACKOFF_SEC", "5"))
 
 # ================= 2. 生成策略配置 =================
 # 这里把原本偏论文复现的链式提示词，整理成“多种可切换的生成策略”。
