@@ -12,6 +12,14 @@ GEN_WORKERS="${GEN_WORKERS:-8}"
 GEN_RUN_TAG="${GEN_RUN_TAG:-formal_${PROMPT_MODE}_deepseek_v2}"
 GEN_OUTPUT_ROOT="${GEN_OUTPUT_ROOT:-$REPO_ROOT/gvi_causalcode/data/reveal/${GEN_RUN_TAG}}"
 GEN_OUTPUT_RESULT_ROOT="${GEN_OUTPUT_RESULT_ROOT:-${GEN_OUTPUT_ROOT}_result}"
+FILTER_MODE="${FILTER_MODE:-source_only}"
+TARGET_ALIGN_TASK="${TARGET_ALIGN_TASK:-}"
+TARGET_ALIGN_KEEP_TOP_N="${TARGET_ALIGN_KEEP_TOP_N:-0}"
+TARGET_ALIGN_KEEP_RATIO="${TARGET_ALIGN_KEEP_RATIO:-0.35}"
+TARGET_ALIGN_MAX_PER_SEED="${TARGET_ALIGN_MAX_PER_SEED:-2}"
+TARGET_ALIGN_MIN_COSINE="${TARGET_ALIGN_MIN_COSINE:-0.08}"
+TARGET_ALIGN_SOURCE_MIN_DISTANCE="${TARGET_ALIGN_SOURCE_MIN_DISTANCE:-0.10}"
+TARGET_ALIGN_SOURCE_MAX_DISTANCE="${TARGET_ALIGN_SOURCE_MAX_DISTANCE:-0.92}"
 
 AUG_TASK_NAME="${AUG_TASK_NAME:-reveal_aug_v2}"
 LIMIT_GENERATED="${LIMIT_GENERATED:-0}"
@@ -77,6 +85,8 @@ print_config() {
   echo "GEN_RUN_TAG=$GEN_RUN_TAG"
   echo "GEN_OUTPUT_ROOT=$GEN_OUTPUT_ROOT"
   echo "GEN_OUTPUT_RESULT_ROOT=$GEN_OUTPUT_RESULT_ROOT"
+  echo "FILTER_MODE=$FILTER_MODE"
+  echo "TARGET_ALIGN_TASK=$TARGET_ALIGN_TASK"
   echo "AUG_TASK_NAME=$AUG_TASK_NAME"
   echo "LIMIT_GENERATED=$LIMIT_GENERATED"
   echo "GPU_ID=$GPU_ID"
@@ -120,6 +130,26 @@ run_post_analysis() {
   GEN_OUTPUT_RESULT_ROOT="$GEN_OUTPUT_RESULT_ROOT" \
   ORIGIN_VUL_DATA="../data/reveal/reveal_vul_only.json" \
   "$PYTHON_BIN" post_analysis.py
+}
+
+run_cross_domain_alignment_filter() {
+  cd "$REPO_ROOT/gvi_causalcode/generation"
+  if [ -z "$TARGET_ALIGN_TASK" ]; then
+    echo "FILTER_MODE=source_target_align 需要设置 TARGET_ALIGN_TASK，例如 devign。" >&2
+    exit 1
+  fi
+
+  "$PYTHON_BIN" filter_cross_domain_alignment.py \
+    --similarity-json "$GEN_OUTPUT_RESULT_ROOT/similarity.json" \
+    --target-pkl "$REPO_ROOT/gvi_causalcode/data/$TARGET_ALIGN_TASK/dataset/origin_s/data.pkl.gz" \
+    --output-json "$GEN_OUTPUT_RESULT_ROOT/final_augmented_vul.json" \
+    --report-json "$GEN_OUTPUT_RESULT_ROOT/target_alignment_report.json" \
+    --source-min-distance "$TARGET_ALIGN_SOURCE_MIN_DISTANCE" \
+    --source-max-distance "$TARGET_ALIGN_SOURCE_MAX_DISTANCE" \
+    --target-min-cosine "$TARGET_ALIGN_MIN_COSINE" \
+    --keep-top-n "$TARGET_ALIGN_KEEP_TOP_N" \
+    --keep-ratio "$TARGET_ALIGN_KEEP_RATIO" \
+    --max-per-seed "$TARGET_ALIGN_MAX_PER_SEED"
 }
 
 build_augmented_task() {
@@ -178,6 +208,9 @@ main() {
   run_generation
   run_post_process
   run_post_analysis
+  if [ "$FILTER_MODE" = "source_target_align" ]; then
+    run_cross_domain_alignment_filter
+  fi
   build_augmented_task
   train_guide_and_regenerate_domain
   train_and_test_dual_domain

@@ -28,10 +28,16 @@ NUM_VARIANTS = int(os.getenv("NUM_VARIANTS", "4"))
 MAX_SAMPLES = int(os.getenv("MAX_SAMPLES", "0"))
 
 SYSTEM_PROMPT = (
-    "You are a senior vulnerability researcher. "
-    "Your task is to generate realistic vulnerable C functions for data augmentation. "
-    "Preserve plausible software context and vulnerability mechanisms. "
-    "Do not explain unless explicitly asked. When asked to generate code, output only the requested content."
+    """
+You are a senior vulnerability researcher. Your task is to perform context-aware vulnerability injection for data augmentation. 
+You will receive a Safe Target Code, a Reference Vulnerability (for the attack mechanism), and External Function Summaries.
+
+CRITICAL RULES:
+1. Preserve the original software context and plausible business logic.
+2. DO NOT alter, remove, or hallucinate external function calls. You must respect the provided External Function Summaries.
+3. Inject the vulnerability naturally, mimicking human error, based on the Reference Vulnerability.
+4. Output ONLY the raw C code. Do not wrap it in markdown blockticks unless necessary. Do not provide explanations, notes, or conversational filler.
+    """
 )
 
 # ================= 3. 路径配置 (适配 ReVeal) =================

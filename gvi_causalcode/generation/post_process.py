@@ -235,6 +235,21 @@ def remove_selected_structs(code):
     return code
 
 
+def collect_comment_stats(raw_code, cleaned_code):
+    comment_pattern = re.compile(r"/\*.*?\*/|//[^\r\n]*$", re.MULTILINE | re.DOTALL)
+    comment_matches = comment_pattern.findall(raw_code)
+    removed_comment_chars = sum(len(item) for item in comment_matches)
+    raw_len = len(raw_code)
+    cleaned_len = len(cleaned_code)
+    return {
+        "comment_block_count": len(comment_matches),
+        "removed_comment_chars": removed_comment_chars,
+        "raw_char_len": raw_len,
+        "cleaned_char_len": cleaned_len,
+        "removed_comment_ratio": 0.0 if raw_len == 0 else removed_comment_chars / raw_len,
+    }
+
+
 def extract_code_blocks(context):
     """优先从 Assistant 回答里提取代码块，兼容旧版 Step 4 输出。"""
     assistant_sections = re.findall(
@@ -276,6 +291,8 @@ def process_generated_files():
             "accepted": 0,
             "rejected": 0,
             "no_code_block_files": 0,
+            "samples_with_comments_removed": 0,
+            "total_removed_comment_chars": 0,
         },
         "items": [],
     }
@@ -309,6 +326,10 @@ def process_generated_files():
                 cleaned_code = remove_selected_structs(remove_comments(match))
                 if not cleaned_code.strip():
                     continue
+                comment_stats = collect_comment_stats(match, cleaned_code)
+                if comment_stats["comment_block_count"] > 0:
+                    check_report["summary"]["samples_with_comments_removed"] += 1
+                    check_report["summary"]["total_removed_comment_chars"] += comment_stats["removed_comment_chars"]
 
                 syntax_result = _run_syntax_check(cleaned_code)
                 semgrep_result = _run_semgrep_check(cleaned_code)
@@ -319,6 +340,7 @@ def process_generated_files():
                         "source_txt": file_path,
                         "generated_variant": generated_name,
                         "accepted": passed,
+                        "comment_stats": comment_stats,
                         "syntax_check": syntax_result,
                         "semgrep_check": semgrep_result,
                     }
