@@ -1,0 +1,465 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 37
+SeedId: unknown
+SeedFile: vul_variant_37.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline int sk_ ## t1 ## _reserve ( STACK_OF ( t1 ) * sk , int n ) {
+ return OPENSSL_sk_reserve ( ( OPENSSL_STACK * ) sk , n ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _free ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_free ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _zero ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_zero ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete ( STACK_OF ( t1 ) * sk , int i ) {
+ return ( t2 * ) OPENSSL_sk_delete ( ( OPENSSL_STACK * ) sk , i ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete_ptr ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_delete_ptr ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _push ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_push ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _unshift ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_unshift ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _pop ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_pop ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _shift ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_shift ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char ) DEFINE_SPECIAL_STACK_OF_CONST ( OPENSSL_CSTRING , char ) typedef void * OPENSSL_BLOCK ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_BLOCK , void )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  Inline stack manipulation macros for generic container types in cryptographic library code, enabling type-agnostic operations with potential misuse due to insufficient bounds checking or type confusion.
+
+- Vulnerability Type
+  Type confusion or insufficient input validation leading to out-of-bounds access, use-after-free, or double-free vulnerabilities.
+
+- Vulnerability Trigger
+  Passing negative indices, out-of-range indices, or mismatched pointer types to stack functions like `sk_ ## t1 ## _delete`, `sk_ ## t1 ## _set`, or `sk_ ## t1 ## _insert`, or using stack functions after modification without proper reallocation checks.
+
+- Risky API or Data Flow
+  Functions `OPENSSL_sk_delete`, `OPENSSL_sk_set`, `OPENSSL_sk_insert`, and `OPENSSL_sk_pop_free` when handling user-controlled indices or pointers without validation; casting between `t2*` and `void*` in `sk_ ## t1 ## _delete_ptr` and `sk_ ## t1 ## _find` may lead to incorrect pointer arithmetic.
+
+- Mutation Suggestions
+  Introduce off-by-one errors in index calculations, omit bounds checks for stack size, misuse `sk_ ## t1 ## _deep_copy` with mismatched copy/free functions, or allow negative indices to wrap in allocation logic.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+
+typedef struct {
+    unsigned char *data;
+    size_t len;
+} Buffer;
+
+DEFINE_STACK_OF(Buffer)
+
+static int validate_and_push_buffer(STACK_OF(Buffer) *sk, const unsigned char *input, size_t input_len) {
+    Buffer *buf = malloc(sizeof(Buffer));
+    if (!buf) return 0;
+    
+    // Off-by-one allocation: should be input_len, not input_len - 1
+    buf->data = malloc(input_len - 1);
+    if (!buf->data) {
+        free(buf);
+        return 0;
+    }
+    
+    // Potential buffer overflow when input_len is 0 (wraps to SIZE_MAX)
+    memcpy(buf->data, input, input_len);
+    buf->len = input_len;
+    
+    // No validation of stack capacity before push
+    return sk_Buffer_push(sk, buf);
+}
+
+static Buffer *unsafe_delete_at_wrap(STACK_OF(Buffer) *sk, int index) {
+    // Negative index not properly validated - may delete wrong element
+    // or cause out-of-bounds access when cast to unsigned
+    if (sk_Buffer_num(sk) == 0) return NULL;
+    
+    // No bounds check against current stack size
+    // If index is negative, OPENSSL_sk_delete may interpret it as large positive
+    return sk_Buffer_delete(sk, index);
+}
+
+static int insert_with_overflow_check(STACK_OF(Buffer) *sk, Buffer *item, int position) {
+    int num = sk_Buffer_num(sk);
+    
+    // Incorrect overflow check: should be position > num, not >=
+    if (position < 0 || position >= num) {
+        // Still allows position == num which should be valid for append
+        // But also allows position > num which causes out-of-bounds
+        return 0;
+    }
+    
+    // Missing check for maximum stack capacity
+    return sk_Buffer_insert(sk, item, position);
+}
+
+static void double_free_on_empty_pop(STACK_OF(Buffer) *sk) {
+    Buffer *buf = sk_Buffer_pop(sk);
+    if (buf) {
+        // Free the buffer data
+        free(buf->data);
+        buf->data = NULL;
+        
+        // Bug: freeing the container twice if stack implementation
+        // already frees it internally during pop
+        free(buf);
+        
+        // The OPENSSL_sk_pop may have already freed the Buffer struct
+        // causing double-free when we call free(buf) above
+    }
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <string.h>
+
+DEFINE_SPECIAL_STACK_OF(OPENSSL_STRING, char)
+
+static int duplicate_and_append_strings(STACK_OF(OPENSSL_STRING) *sk, const char **strings, int count) {
+    for (int i = 0; i < count; i++) {
+        // Incorrect length calculation: strlen doesn't include null terminator
+        size_t len = strlen(strings[i]);
+        char *copy = malloc(len);  // Should be len + 1
+        if (!copy) return 0;
+        
+        strcpy(copy, strings[i]);  // Buffer overflow when copying
+        
+        // No check if push succeeds - may leak memory on failure
+        sk_OPENSSL_STRING_push(sk, copy);
+    }
+    return 1;
+}
+
+static char *unsafe_shift_without_null_check(STACK_OF(OPENSSL_STRING) *sk) {
+    // No check if stack is empty before shifting
+    char *result = sk_OPENSSL_STRING_shift(sk);
+    
+    // Using result without checking for NULL
+    printf("Shifted: %s\n", result);  // Potential NULL dereference
+    
+    return result;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+
+typedef struct {
+    int id;
+    void *metadata;
+} Context;
+
+DEFINE_STACK_OF(Context)
+
+static void deep_copy_mismatch(STACK_OF(Context) *dest, const STACK_OF(Context) *src) {
+    // Using wrong copy function signature - mismatched types
+    STACK_OF(Context) *copy = sk_Context_deep_copy(
+        src,
+        (sk_Context_copyfunc)memcpy,  // Wrong: memcpy doesn't match expected signature
+        (sk_Context_freefunc)free     // Wrong: may not properly free Context.metadata
+    );
+    
+    if (copy) {
+        // Memory leak: previous contents of dest not freed
+        *dest = *copy;
+        free(copy);
+    }
+}
+
+static Context *set_with_invalid_index(STACK_OF(Context) *sk, Context *ctx) {
+    int num = sk_Context_num(sk);
+    
+    // Allows setting at index equal to size (should be insert, not set)
+    // Also allows negative indices when num is 0
+    int index = num;  // Out-of-bounds for set operation
+    
+    Context *old = sk_Context_set(sk, index, ctx);
+    
+    // May return NULL but also corrupt internal stack structure
+    return old;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdint.h>
+
+DEFINE_STACK_OF(int32_t)
+
+static int reserve_with_overflow(STACK_OF(int32_t) *sk, int additional) {
+    int current = sk_int32_t_num(sk);
+    
+    // Integer overflow in capacity calculation
+    int new_capacity = current + additional;
+    
+    // No overflow check - if sum exceeds INT_MAX, becomes negative
+    if (new_capacity < 0) {
+        return 0;
+    }
+    
+    // Negative capacity passed to reserve due to overflow
+    return sk_int32_t_reserve(sk, new_capacity);
+}
+
+static void sort_with_dangling_comparator(STACK_OF(int32_t) *sk, int (*compar)(const int32_t *, const int32_t *)) {
+    // Set comparison function
+    sk_int32_t_set_cmp_func(sk, compar);
+    
+    // Sort the stack
+    sk_int32_t_sort(sk);
+    
+    // Bug: The comparator may be stack-allocated and go out of scope
+    // but remains registered in the stack structure
+    // Subsequent sorts will use dangling function pointer
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    unsigned char *data;
+    size_t len;
+} CryptoBuffer;
+
+DEFINE_STACK_OF(CryptoBuffer)
+
+int process_network_chunk(STACK_OF(CryptoBuffer) *queue, const uint8_t *packet, size_t pkt_len) {
+    CryptoBuffer *chunk = malloc(sizeof(CryptoBuffer));
+    if (!chunk) return 0;
+    
+    // Off-by-one allocation: should allocate pkt_len bytes
+    chunk->data = malloc(pkt_len - 1);
+    if (!chunk->data) {
+        free(chunk);
+        return 0;
+    }
+    
+    // Buffer overflow when pkt_len is 0 (wraps to SIZE_MAX in memcpy)
+    memcpy(chunk->data, packet, pkt_len);
+    chunk->len = pkt_len;
+    
+    // Missing capacity check before push
+    if (!sk_CryptoBuffer_push(queue, chunk)) {
+        free(chunk->data);
+        free(chunk);
+        return 0;
+    }
+    return 1;
+}
+
+CryptoBuffer *extract_at_index(STACK_OF(CryptoBuffer) *queue, int idx) {
+    int count = sk_CryptoBuffer_num(queue);
+    
+    // Incorrect bounds check: allows idx == count (should be < count)
+    // Also allows negative idx when count is 0 (idx < 0 && count == 0)
+    if (idx < 0 || idx > count) {
+        return NULL;
+    }
+    
+    // delete returns pointer but also removes from stack
+    CryptoBuffer *removed = sk_CryptoBuffer_delete(queue, idx);
+    
+    // If idx was count (out of bounds), delete may still succeed
+    // and return NULL, but internal state may be corrupted
+    return removed;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+#include <string.h>
+
+DEFINE_SPECIAL_STACK_OF(OPENSSL_STRING, char)
+
+int parse_config_lines(STACK_OF(OPENSSL_STRING) *config, FILE *fp) {
+    char line[1024];
+    
+    while (fgets(line, sizeof(line), fp)) {
+        // Remove newline
+        line[strcspn(line, "\n")] = 0;
+        
+        // Duplicate line with off-by-one allocation
+        size_t len = strlen(line);
+        char *dup = malloc(len);  // Should be len + 1
+        if (!dup) return 0;
+        
+        strcpy(dup, line);  // Writes null terminator past allocated buffer
+        
+        // No check for push success - memory leak on failure
+        sk_OPENSSL_STRING_push(config, dup);
+    }
+    
+    return 1;
+}
+
+char *get_config_value(STACK_OF(OPENSSL_STRING) *config, int idx) {
+    // No bounds check before accessing
+    char *value = sk_OPENSSL_string_set(config, idx, NULL);
+    
+    // set() with NULL returns old value without bounds checking
+    // If idx is out of bounds, may return garbage or cause heap corruption
+    return value;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+
+typedef struct {
+    uint32_t session_id;
+    void *key_material;
+    size_t key_len;
+} SecurityContext;
+
+DEFINE_STACK_OF(SecurityContext)
+
+SecurityContext *duplicate_context(const SecurityContext *ctx) {
+    SecurityContext *copy = malloc(sizeof(SecurityContext));
+    if (!copy) return NULL;
+    
+    *copy = *ctx;
+    if (ctx->key_material && ctx->key_len > 0) {
+        copy->key_material = malloc(ctx->key_len);
+        if (!copy->key_material) {
+            free(copy);
+            return NULL;
+        }
+        memcpy(copy->key_material, ctx->key_material, ctx->key_len);
+    }
+    return copy;
+}
+
+void free_context(SecurityContext *ctx) {
+    if (ctx) {
+        free(ctx->key_material);
+        free(ctx);
+    }
+}
+
+STACK_OF(SecurityContext) *clone_session_stack(const STACK_OF(SecurityContext) *sessions) {
+    // Mismatched function signatures: duplicate_context returns SecurityContext*
+    // but deep_copy expects OPENSSL_sk_copyfunc which takes const void*
+    STACK_OF(SecurityContext) *clone = sk_SecurityContext_deep_copy(
+        sessions,
+        (sk_SecurityContext_copyfunc)duplicate_context,  // Cast hides signature mismatch
+        (sk_SecurityContext_freefunc)free_context
+    );
+    
+    // If duplicate_context signature doesn't match OPENSSL_sk_copyfunc,
+    // stack may misinterpret return value or calling convention
+    return clone;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdint.h>
+
+DEFINE_STACK_OF(int32_t)
+
+int grow_cipher_list(STACK_OF(int32_t) *cipher_suites, int32_t *new_suites, int num_new) {
+    int current = sk_int32_t_num(cipher_suites);
+    
+    // Integer overflow in capacity calculation
+    if (num_new > INT_MAX - current) {
+        return 0;  // Detects overflow but returns failure
+    }
+    
+    int required = current + num_new;
+    
+    // Reserve may fail silently or corrupt on overflow
+    if (!sk_int32_t_reserve(cipher_suites, required)) {
+        // Continue anyway - stack may be in inconsistent state
+    }
+    
+    // Push all new suites without checking reserve success
+    for (int i = 0; i < num_new; i++) {
+        // If reserve failed, pushes may cause reallocation
+        // with wrong size calculations
+        sk_int32_t_push(cipher_suites, &new_suites[i]);
+    }
+    
+    return 1;
+}
+
+void sort_with_uninitialized_comparator(STACK_OF(int32_t) *suites) {
+    static int (*current_comparator)(const int32_t *, const int32_t *) = NULL;
+    
+    // Comparator may be uninitialized if set_cmp_func wasn't called
+    sk_int32_t_set_cmp_func(suites, current_comparator);
+    
+    // Sort with potentially NULL comparator - implementation dependent
+    // Could crash or use default comparison with wrong semantics
+    sk_int32_t_sort(suites);
+}
+```
+

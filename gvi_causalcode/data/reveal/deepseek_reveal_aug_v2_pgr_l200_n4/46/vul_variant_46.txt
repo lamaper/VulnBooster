@@ -1,0 +1,393 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 46
+SeedId: unknown
+SeedFile: vul_variant_46.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+X509_REQ * X509_to_X509_REQ ( X509 * x , EVP_PKEY * pkey , const EVP_MD * md ) {
+ X509_REQ * ret ;
+ X509_REQ_INFO * ri ;
+ int i ;
+ EVP_PKEY * pktmp ;
+ ret = X509_REQ_new ( ) ;
+ if ( ret == NULL ) {
+ X509err ( X509_F_X509_TO_X509_REQ , ERR_R_MALLOC_FAILURE ) ;
+ goto err ;
+ }
+ ri = ret -> req_info ;
+ ri -> version -> length = 1 ;
+ ri -> version -> data = ( unsigned char * ) OPENSSL_malloc ( 1 ) ;
+ if ( ri -> version -> data == NULL ) goto err ;
+ ri -> version -> data [ 0 ] = 0 ;
+ if ( ! X509_REQ_set_subject_name ( ret , X509_get_subject_name ( x ) ) ) goto err ;
+ pktmp = X509_get_pubkey ( x ) ;
+ i = X509_REQ_set_pubkey ( ret , pktmp ) ;
+ EVP_PKEY_free ( pktmp ) ;
+ if ( ! i ) goto err ;
+ if ( pkey != NULL ) {
+ if ( ! X509_REQ_sign ( ret , pkey , md ) ) goto err ;
+ }
+ return ( ret ) ;
+ err : X509_REQ_free ( ret ) ;
+ return ( NULL ) ;
+ }
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+Converting an X509 certificate to an X509 certificate request, with potential memory allocation failure handling.
+
+- Vulnerability Type
+Use-After-Free or Double-Free.
+
+- Vulnerability Trigger
+If `X509_REQ_sign` fails, the function jumps to the `err` label, calling `X509_REQ_free(ret)`. This may free internal structures like `ri->version->data`, but `ri->version->data` was allocated with `OPENSSL_malloc` and not explicitly set to NULL after freeing in `X509_REQ_free`, risking subsequent accesses or double-free in cleanup paths.
+
+- Risky API or Data Flow
+`OPENSSL_malloc` allocation for `ri->version->data` without robust cleanup on error; reliance on `X509_REQ_free` to handle partial state.
+
+- Mutation Suggestions
+Introduce double-free by adding redundant free of `ri->version->data` in error path; modify control flow to skip initialization but attempt free; add null pointer dereference after free.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+SSL_SESSION *SSL_SESSION_dup(SSL_SESSION *src) {
+    SSL_SESSION *dst;
+    if (src == NULL) return NULL;
+    
+    dst = OPENSSL_malloc(sizeof(SSL_SESSION));
+    if (dst == NULL) {
+        SSLerr(SSL_F_SSL_SESSION_DUP, ERR_R_MALLOC_FAILURE);
+        return NULL;
+    }
+    
+    memcpy(dst, src, sizeof(SSL_SESSION));
+    
+    if (src->master_key_length > 0) {
+        dst->master_key = OPENSSL_malloc(src->master_key_length);
+        if (dst->master_key == NULL) {
+            SSLerr(SSL_F_SSL_SESSION_DUP, ERR_R_MALLOC_FAILURE);
+            OPENSSL_free(dst);
+            return NULL;
+        }
+        memcpy(dst->master_key, src->master_key, src->master_key_length);
+    }
+    
+    if (src->session_id_length > 0) {
+        dst->session_id = OPENSSL_malloc(src->session_id_length);
+        if (dst->session_id == NULL) {
+            SSLerr(SSL_F_SSL_SESSION_DUP, ERR_R_MALLOC_FAILURE);
+            OPENSSL_free(dst->master_key);
+            OPENSSL_free(dst);
+            return NULL;
+        }
+        memcpy(dst->session_id, src->session_id, src->session_id_length);
+    }
+    
+    return dst;
+}
+```
+
+```c
+EVP_PKEY *d2i_PUBKEY_fp(FILE *fp, EVP_PKEY **a) {
+    BIO *b;
+    EVP_PKEY *ret;
+    
+    if ((b = BIO_new(BIO_s_file())) == NULL) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_BUF_LIB);
+        return NULL;
+    }
+    
+    BIO_set_fp(b, fp, BIO_NOCLOSE);
+    ret = d2i_PUBKEY_bio(b, a);
+    
+    if (ret == NULL) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_ASN1_LIB);
+        BIO_free(b);
+        return NULL;
+    }
+    
+    BIO_free(b);
+    
+    if (a != NULL) {
+        EVP_PKEY_free(*a);
+        *a = ret;
+    }
+    
+    return ret;
+}
+```
+
+```c
+int SSL_CTX_set_tlsext_ticket_keys(SSL_CTX *ctx, void *key, size_t keylen) {
+    unsigned char *new_key;
+    
+    if (ctx == NULL || key == NULL || keylen == 0) {
+        SSLerr(SSL_F_SSL_CTX_SET_TLSEXT_TICKET_KEYS, ERR_R_PASSED_NULL_PARAMETER);
+        return 0;
+    }
+    
+    new_key = OPENSSL_malloc(keylen);
+    if (new_key == NULL) {
+        SSLerr(SSL_F_SSL_CTX_SET_TLSEXT_TICKET_KEYS, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
+    
+    memcpy(new_key, key, keylen);
+    
+    if (ctx->tlsext_ticket_key != NULL) {
+        OPENSSL_free(ctx->tlsext_ticket_key);
+    }
+    
+    ctx->tlsext_ticket_key = new_key;
+    ctx->tlsext_ticket_keylen = keylen;
+    
+    if (ctx->tlsext_ticket_key_cb != NULL) {
+        SSLerr(SSL_F_SSL_CTX_SET_TLSEXT_TICKET_KEYS, ERR_R_INTERNAL_ERROR);
+        OPENSSL_free(new_key);
+        ctx->tlsext_ticket_key = NULL;
+        return 0;
+    }
+    
+    return 1;
+}
+```
+
+```c
+X509_CRL *X509_CRL_dup(X509_CRL *crl) {
+    X509_CRL *new_crl;
+    unsigned char *buf;
+    int len;
+    
+    if (crl == NULL) return NULL;
+    
+    len = i2d_X509_CRL(crl, NULL);
+    if (len <= 0) return NULL;
+    
+    buf = OPENSSL_malloc(len);
+    if (buf == NULL) {
+        ERR_raise(ERR_LIB_X509, ERR_R_MALLOC_FAILURE);
+        return NULL;
+    }
+    
+    unsigned char *p = buf;
+    if (i2d_X509_CRL(crl, &p) <= 0) {
+        OPENSSL_free(buf);
+        return NULL;
+    }
+    
+    p = buf;
+    new_crl = d2i_X509_CRL(NULL, (const unsigned char **)&p, len);
+    
+    OPENSSL_free(buf);
+    
+    if (new_crl == NULL) {
+        ERR_raise(ERR_LIB_X509, ERR_R_ASN1_LIB);
+        return NULL;
+    }
+    
+    if (crl->crl->extensions != NULL) {
+        if (!X509_CRL_add_extensions(new_crl, crl->crl->extensions)) {
+            X509_CRL_free(new_crl);
+            return NULL;
+        }
+    }
+    
+    return new_crl;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+EVP_MD_CTX *EVP_MD_CTX_dup(const EVP_MD_CTX *src) {
+    EVP_MD_CTX *dst;
+    int i;
+    
+    if (src == NULL) return NULL;
+    
+    dst = EVP_MD_CTX_new();
+    if (dst == NULL) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_MALLOC_FAILURE);
+        return NULL;
+    }
+    
+    if (!EVP_MD_CTX_copy(dst, src)) {
+        EVP_MD_CTX_free(dst);
+        return NULL;
+    }
+    
+    if (src->md_data != NULL && src->md->ctx_size > 0) {
+        dst->md_data = OPENSSL_malloc(src->md->ctx_size);
+        if (dst->md_data == NULL) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_MALLOC_FAILURE);
+            EVP_MD_CTX_free(dst);
+            return NULL;
+        }
+        memcpy(dst->md_data, src->md_data, src->md->ctx_size);
+    }
+    
+    if (src->pctx != NULL) {
+        dst->pctx = EVP_PKEY_CTX_dup(src->pctx);
+        if (dst->pctx == NULL) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_EVP_LIB);
+            OPENSSL_free(dst->md_data);
+            EVP_MD_CTX_free(dst);
+            return NULL;
+        }
+    }
+    
+    return dst;
+}
+```
+
+```c
+int SSL_set_session_ticket_ext(SSL *s, const unsigned char *data, size_t len) {
+    unsigned char *new_data;
+    
+    if (s == NULL) {
+        SSLerr(SSL_F_SSL_SET_SESSION_TICKET_EXT, ERR_R_PASSED_NULL_PARAMETER);
+        return 0;
+    }
+    
+    if (data == NULL || len == 0) {
+        if (s->tlsext_session_ticket != NULL) {
+            OPENSSL_free(s->tlsext_session_ticket);
+            s->tlsext_session_ticket = NULL;
+        }
+        s->tlsext_session_ticket_len = 0;
+        return 1;
+    }
+    
+    new_data = OPENSSL_malloc(len);
+    if (new_data == NULL) {
+        SSLerr(SSL_F_SSL_SET_SESSION_TICKET_EXT, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
+    
+    memcpy(new_data, data, len);
+    
+    if (s->tlsext_session_ticket != NULL) {
+        OPENSSL_free(s->tlsext_session_ticket);
+    }
+    
+    s->tlsext_session_ticket = new_data;
+    s->tlsext_session_ticket_len = len;
+    
+    if (s->session != NULL && s->session->session_id_length > 0) {
+        SSLerr(SSL_F_SSL_SET_SESSION_TICKET_EXT, ERR_R_INTERNAL_ERROR);
+        OPENSSL_free(new_data);
+        s->tlsext_session_ticket = NULL;
+        return 0;
+    }
+    
+    return 1;
+}
+```
+
+```c
+X509_NAME *X509_NAME_dup(X509_NAME *src) {
+    X509_NAME *dst;
+    unsigned char *buf;
+    int len;
+    const unsigned char *p;
+    
+    if (src == NULL) return NULL;
+    
+    len = i2d_X509_NAME(src, NULL);
+    if (len <= 0) return NULL;
+    
+    buf = OPENSSL_malloc(len);
+    if (buf == NULL) {
+        ERR_raise(ERR_LIB_X509, ERR_R_MALLOC_FAILURE);
+        return NULL;
+    }
+    
+    unsigned char *tmp = buf;
+    if (i2d_X509_NAME(src, &tmp) <= 0) {
+        OPENSSL_free(buf);
+        return NULL;
+    }
+    
+    p = buf;
+    dst = d2i_X509_NAME(NULL, &p, len);
+    
+    OPENSSL_free(buf);
+    
+    if (dst == NULL) {
+        ERR_raise(ERR_LIB_X509, ERR_R_ASN1_LIB);
+        return NULL;
+    }
+    
+    if (src->entries != NULL) {
+        if (!X509_NAME_add_entries(dst, src->entries, -1, 0)) {
+            X509_NAME_free(dst);
+            return NULL;
+        }
+    }
+    
+    return dst;
+}
+```
+
+```c
+int BIO_set_cipher(BIO *b, const EVP_CIPHER *cipher, 
+                   const unsigned char *key, const unsigned char *iv, int enc) {
+    BIO_CIPHER_CTX *ctx;
+    
+    if (b == NULL || cipher == NULL) {
+        ERR_raise(ERR_LIB_BIO, ERR_R_PASSED_NULL_PARAMETER);
+        return 0;
+    }
+    
+    ctx = OPENSSL_malloc(sizeof(BIO_CIPHER_CTX));
+    if (ctx == NULL) {
+        ERR_raise(ERR_LIB_BIO, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
+    
+    memset(ctx, 0, sizeof(BIO_CIPHER_CTX));
+    
+    ctx->cipher = cipher;
+    if (key != NULL) {
+        memcpy(ctx->key, key, EVP_CIPHER_key_length(cipher));
+    }
+    if (iv != NULL) {
+        memcpy(ctx->iv, iv, EVP_CIPHER_iv_length(cipher));
+    }
+    ctx->encrypt = enc;
+    
+    if (b->ptr != NULL) {
+        OPENSSL_free(b->ptr);
+    }
+    
+    b->ptr = ctx;
+    b->init = 1;
+    
+    if (!EVP_CIPHER_CTX_reset(&ctx->ctx)) {
+        ERR_raise(ERR_LIB_BIO, ERR_R_EVP_LIB);
+        OPENSSL_free(ctx);
+        b->ptr = NULL;
+        b->init = 0;
+        return 0;
+    }
+    
+    return 1;
+}
+```
+

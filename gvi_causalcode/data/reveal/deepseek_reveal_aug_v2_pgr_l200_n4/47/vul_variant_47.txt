@@ -1,0 +1,263 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 47
+SeedId: unknown
+SeedFile: vul_variant_47.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new ( sk_ ## t1 ## _compfunc compare ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new ( ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new_null ( void ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new_null ( ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new_reserve ( sk_ ## t1 ## _compfunc compare , int n ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new_reserve ( ( OPENSSL_sk_compfunc ) compare , n ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _reserve ( STACK_OF ( t1 ) * sk , int n ) {
+ return OPENSSL_sk_reserve ( ( OPENSSL_STACK * ) sk , n ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _free ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_free ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _zero ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_zero ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete ( STACK_OF ( t1 ) * sk , int i ) {
+ return ( t2 * ) OPENSSL_sk_delete ( ( OPENSSL_STACK * ) sk , i ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete_ptr ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_delete_ptr ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _push ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_push ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _unshift ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_unshift ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _pop ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_pop ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _shift ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_shift ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char ) DEFINE_SPECIAL_STACK_OF_CONST ( OPENSSL_CSTRING , char ) typedef void * OPENSSL_BLOCK ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_BLOCK , void )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**
+  Generic stack manipulation macros in OpenSSL that can be instantiated for arbitrary types, potentially leading to type confusion or memory safety issues when misused with incompatible data types or improper bounds management.
+
+- **Vulnerability Type**
+  Type confusion and improper casting leading to memory corruption, use-after-free, or out-of-bounds access.
+
+- **Vulnerability Trigger**
+  Instantiating the macro with mismatched types for `t1` and `t2`, or using the generated functions on a stack that contains elements of a different size or layout than expected, causing casts to misinterpret memory.
+
+- **Risky API or Data Flow**
+  The macros `DEFINE_SPECIAL_STACK_OF` and `DEFINE_STACK_OF` generate functions that cast between `t1*`, `t2*`, and `void*` without runtime type checking. Functions like `sk_##t1##_delete`, `sk_##t1##_set`, and `sk_##t1##_pop` perform unchecked pointer casts and direct memory operations.
+
+- **Mutation Suggestions**
+  Modify the macro to generate functions with mismatched type parameters, introduce off-by-one errors in index handling, omit null checks, or create inconsistent comparison functions that violate ordering invariants.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+static ossl_inline STACK_OF(EVP_PKEY) *sk_EVP_PKEY_new_reserve(sk_EVP_PKEY_compfunc compare, int n) {
+    if (n < 0) n = 0; // Missing overflow check for n+1
+    return (STACK_OF(EVP_PKEY) *)OPENSSL_sk_new_reserve((OPENSSL_sk_compfunc)compare, n);
+}
+
+static ossl_inline int sk_EVP_PKEY_insert(STACK_OF(EVP_PKEY) *sk, EVP_PKEY *ptr, int idx) {
+    // No bounds checking on idx; negative values cause front insertion, large values cause append
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)ptr, idx);
+}
+
+static ossl_inline EVP_PKEY *sk_EVP_PKEY_set(STACK_OF(EVP_PKEY) *sk, int idx, EVP_PKEY *ptr) {
+    // Direct cast to wrong type: assumes EVP_PKEY** but stack holds EVP_PKEY*
+    EVP_PKEY **p = (EVP_PKEY **)OPENSSL_sk_set((OPENSSL_STACK *)sk, idx, (const void *)&ptr);
+    return p ? *p : NULL;
+}
+
+static ossl_inline void sk_X509_pop_free(STACK_OF(X509) *sk, sk_X509_freefunc freefunc) {
+    // Double-free vulnerability: freefunc may free the X509 object, but stack still holds pointer
+    OPENSSL_sk_pop_free((OPENSSL_STACK *)sk, (OPENSSL_sk_freefunc)freefunc);
+    // Subsequent access to sk could use freed pointers
+}
+```
+
+```c
+static ossl_inline STACK_OF(ASN1_OBJECT) *sk_ASN1_OBJECT_dup(const STACK_OF(ASN1_OBJECT) *sk) {
+    // Shallow copy only; if stack owns objects, double-free possible on original free
+    STACK_OF(ASN1_OBJECT) *newsk = (STACK_OF(ASN1_OBJECT) *)OPENSSL_sk_dup((const OPENSSL_STACK *)sk);
+    if (!newsk) return NULL;
+    // Missing deep copy of ASN1_OBJECT objects leads to use-after-free if either stack freed
+    return newsk;
+}
+
+static ossl_inline int sk_ASN1_STRING_find_ex(STACK_OF(ASN1_STRING) *sk, ASN1_STRING *ptr) {
+    // Comparison uses pointer equality, not content; if ptr is a temporary/local, behavior undefined
+    return OPENSSL_sk_find_ex((OPENSSL_STACK *)sk, (const void *)ptr);
+}
+
+static ossl_inline ASN1_STRING *sk_ASN1_STRING_delete_ptr(STACK_OF(ASN1_STRING) *sk, ASN1_STRING *ptr) {
+    // Returns pointer without removing from stack if ptr not found; caller may assume ownership incorrectly
+    ASN1_STRING *result = (ASN1_STRING *)OPENSSL_sk_delete_ptr((OPENSSL_STACK *)sk, (const void *)ptr);
+    return result; // Could be NULL or dangling if ptr already freed
+}
+```
+
+```c
+static ossl_inline void sk_BIO_zero(STACK_OF(BIO) *sk) {
+    // Zeroes stack count but does not free elements; leaks memory if stack owned elements
+    OPENSSL_sk_zero((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline BIO *sk_BIO_shift(STACK_OF(BIO) *sk) {
+    // No check for empty stack; returns NULL but caller may not check
+    BIO *result = (BIO *)OPENSSL_sk_shift((OPENSSL_STACK *)sk);
+    // If stack had one element, shift reduces count but pointer remains in internal array
+    return result;
+}
+
+static ossl_inline int sk_BIO_push(STACK_OF(BIO) *sk, BIO *ptr) {
+    // Pushes pointer without checking if ptr already in another stack; could cause double management
+    return OPENSSL_sk_push((OPENSSL_STACK *)sk, (const void *)ptr);
+}
+```
+
+```c
+static ossl_inline STACK_OF(SSL_CIPHER) *sk_SSL_CIPHER_deep_copy(const STACK_OF(SSL_CIPHER) *sk,
+                                                                 sk_SSL_CIPHER_copyfunc copyfunc,
+                                                                 sk_SSL_CIPHER_freefunc freefunc) {
+    // If copyfunc is NULL, deep copy falls back to shallow copy but still uses freefunc on error
+    STACK_OF(SSL_CIPHER) *newsk = (STACK_OF(SSL_CIPHER) *)OPENSSL_sk_deep_copy(
+        (const OPENSSL_STACK *)sk,
+        (OPENSSL_sk_copyfunc)copyfunc,
+        (OPENSSL_sk_freefunc)freefunc);
+    // If copyfunc fails mid-copy, freefunc may be called on partially copied elements
+    return newsk;
+}
+
+static ossl_inline sk_SSL_CIPHER_compfunc sk_SSL_CIPHER_set_cmp_func(STACK_OF(SSL_CIPHER) *sk,
+                                                                     sk_SSL_CIPHER_compfunc compare) {
+    // Swaps comparison function on a possibly non-empty sorted stack; invalidates sort order
+    return (sk_SSL_CIPHER_compfunc)OPENSSL_sk_set_cmp_func((OPENSSL_STACK *)sk,
+                                                           (OPENSSL_sk_compfunc)compare);
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+static ossl_inline STACK_OF(EVP_MD) *sk_EVP_MD_new_reserve(sk_EVP_MD_compfunc compare, int n) {
+    // Integer overflow: if n is INT_MAX, n+1 wraps to negative, but OPENSSL_sk_new_reserve expects signed
+    return (STACK_OF(EVP_MD) *)OPENSSL_sk_new_reserve((OPENSSL_sk_compfunc)compare, n + 1);
+}
+
+static ossl_inline int sk_EVP_MD_insert(STACK_OF(EVP_MD) *sk, EVP_MD *ptr, int idx) {
+    // No validation: negative idx inserts before start, large idx appends, but may exceed internal capacity
+    if (!sk) return 0;
+    return OPENSSL_sk_insert((OPENSSL_STACK *)sk, (const void *)ptr, idx);
+}
+
+static ossl_inline EVP_MD *sk_EVP_MD_set(STACK_OF(EVP_MD) *sk, int idx, EVP_MD *ptr) {
+    // Type confusion: casts void** to EVP_MD* directly, dereferencing misaligned pointer
+    void **result = (void **)OPENSSL_sk_set((OPENSSL_STACK *)sk, idx, (const void *)ptr);
+    return (EVP_MD *)(result ? *result : NULL);
+}
+```
+
+```c
+static ossl_inline STACK_OF(ASN1_TYPE) *sk_ASN1_TYPE_dup(const STACK_OF(ASN1_TYPE) *sk) {
+    // Shallow copy: duplicates pointer array but not objects; double-free if both stacks freed with pop_free
+    STACK_OF(ASN1_TYPE) *newsk = (STACK_OF(ASN1_TYPE) *)OPENSSL_sk_dup((const OPENSSL_STACK *)sk);
+    return newsk;
+}
+
+static ossl_inline ASN1_TYPE *sk_ASN1_TYPE_delete_ptr(STACK_OF(ASN1_TYPE) *sk, ASN1_TYPE *ptr) {
+    // Returns pointer without validation; if ptr not in stack, returns NULL, but caller may assume success
+    ASN1_TYPE *found = (ASN1_TYPE *)OPENSSL_sk_delete_ptr((OPENSSL_STACK *)sk, (const void *)ptr);
+    return found;
+}
+```
+
+```c
+static ossl_inline void sk_BIO_zero(STACK_OF(BIO) *sk) {
+    // Zeroes stack count but retains pointer array; if stack owned elements, causes memory leak
+    OPENSSL_sk_zero((OPENSSL_STACK *)sk);
+}
+
+static ossl_inline BIO *sk_BIO_shift(STACK_OF(BIO) *sk) {
+    // No empty check: shift on empty stack returns NULL, but internal array may be in inconsistent state
+    if (OPENSSL_sk_num((const OPENSSL_STACK *)sk) == 0)
+        return NULL;
+    return (BIO *)OPENSSL_sk_shift((OPENSSL_STACK *)sk);
+}
+```
+
+```c
+static ossl_inline STACK_OF(SSL_SESSION) *sk_SSL_SESSION_deep_copy(const STACK_OF(SSL_SESSION) *sk,
+                                                                   sk_SSL_SESSION_copyfunc copyfunc,
+                                                                   sk_SSL_SESSION_freefunc freefunc) {
+    // If copyfunc fails and returns NULL, freefunc is called on source element, causing use-after-free
+    return (STACK_OF(SSL_SESSION) *)OPENSSL_sk_deep_copy((const OPENSSL_STACK *)sk,
+                                                         (OPENSSL_sk_copyfunc)copyfunc,
+                                                         (OPENSSL_sk_freefunc)freefunc);
+}
+
+static ossl_inline sk_SSL_SESSION_compfunc sk_SSL_SESSION_set_cmp_func(STACK_OF(SSL_SESSION) *sk,
+                                                                       sk_SSL_SESSION_compfunc compare) {
+    // Changes comparator on a sorted stack without re-sorting; binary search on sorted stack becomes invalid
+    sk_SSL_SESSION_compfunc old = (sk_SSL_SESSION_compfunc)OPENSSL_sk_set_cmp_func((OPENSSL_STACK *)sk,
+                                                                                   (OPENSSL_sk_compfunc)compare);
+    return old;
+}
+```
+

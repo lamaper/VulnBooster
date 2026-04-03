@@ -1,0 +1,331 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 50
+SeedId: unknown
+SeedFile: vul_variant_50.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+unsigned long # define BN_BYTES 8 # endif # ifdef SIXTY_FOUR_BIT # define BN_ULONG unsigned long long # define BN_BYTES 8 # endif # ifdef THIRTY_TWO_BIT # define BN_ULONG unsigned int # define BN_BYTES 4 # endif # define BN_BITS2 ( BN_BYTES * 8 ) # define BN_BITS ( BN_BITS2 * 2 ) # define BN_TBIT ( ( BN_ULONG ) 1 << ( BN_BITS2 - 1 ) ) # define BN_FLG_MALLOCED 0x01 # define BN_FLG_STATIC_DATA 0x02 # define BN_FLG_CONSTTIME 0x04 # define BN_FLG_SECURE 0x08 # if OPENSSL_API_COMPAT < 0x00908000L # define BN_FLG_EXP_CONSTTIME BN_FLG_CONSTTIME # define BN_FLG_FREE 0x8000 # endif void BN_set_flags ( BIGNUM * b , int n ) ;
+ int BN_get_flags ( const BIGNUM * b , int n ) ;
+ # define BN_RAND_TOP_ANY - 1 # define BN_RAND_TOP_ONE 0 # define BN_RAND_TOP_TWO 1 # define BN_RAND_BOTTOM_ANY 0 # define BN_RAND_BOTTOM_ODD 1 void BN_with_flags ( BIGNUM * dest , const BIGNUM * b , int flags ) ;
+ int BN_GENCB_call ( BN_GENCB * cb , int a , int b ) ;
+ BN_GENCB * BN_GENCB_new ( void ) ;
+ void BN_GENCB_free ( BN_GENCB * cb ) ;
+ void BN_GENCB_set_old ( BN_GENCB * gencb , void ( * callback ) ( int , int , void * ) , void * cb_arg ) ;
+ void BN_GENCB_set ( BN_GENCB * gencb , int ( * callback ) ( int , int , BN_GENCB * ) , void * cb_arg ) ;
+ void * BN_GENCB_get_arg ( BN_GENCB * cb ) ;
+ # define BN_prime_checks 0 # define BN_prime_checks_for_size ( b ) ( ( b ) >= 3747 ? 3 : ( b ) >= 1345 ? 4 : ( b ) >= 476 ? 5 : ( b ) >= 400 ? 6 : ( b ) >= 347 ? 7 : ( b ) >= 308 ? 8 : ( b ) >= 55 ? 27 : 34 ) # define BN_num_bytes ( a ) ( ( BN_num_bits ( a ) + 7 ) / 8 ) int BN_abs_is_word ( const BIGNUM * a , const BN_ULONG w ) ;
+ int BN_is_zero ( const BIGNUM * a ) ;
+ int BN_is_one ( const BIGNUM * a ) ;
+ int BN_is_word ( const BIGNUM * a , const BN_ULONG w ) ;
+ int BN_is_odd ( const BIGNUM * a ) ;
+ # define BN_one ( a ) ( BN_set_word ( ( a ) , 1 ) ) void BN_zero_ex ( BIGNUM * a ) ;
+ # if OPENSSL_API_COMPAT >= 0x00908000L # define BN_zero ( a ) BN_zero_ex ( a ) # else # define BN_zero ( a ) ( BN_set_word ( ( a ) , 0 ) ) # endif const BIGNUM * BN_value_one ( void ) ;
+ char * BN_options ( void ) ;
+ BN_CTX * BN_CTX_new ( void ) ;
+ BN_CTX * BN_CTX_secure_new ( void ) ;
+ void BN_CTX_free ( BN_CTX * c ) ;
+ void BN_CTX_start ( BN_CTX * ctx ) ;
+ BIGNUM * BN_CTX_get ( BN_CTX * ctx ) ;
+ void BN_CTX_end ( BN_CTX * ctx ) ;
+ int BN_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_priv_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_priv_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_pseudo_rand ( BIGNUM * rnd , int bits , int top , int bottom ) ;
+ int BN_pseudo_rand_range ( BIGNUM * rnd , const BIGNUM * range ) ;
+ int BN_num_bits ( const BIGNUM * a ) ;
+ int BN_num_bits_word ( BN_ULONG l ) ;
+ int BN_security_bits ( int L , int N ) ;
+ BIGNUM * BN_new ( void ) ;
+ BIGNUM * BN_secure_new ( void ) ;
+ void BN_clear_free ( BIGNUM * a ) ;
+ BIGNUM * BN_copy ( BIGNUM * a , const BIGNUM * b ) ;
+ void BN_swap ( BIGNUM * a , BIGNUM * b ) ;
+ BIGNUM * BN_bin2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2bin ( const BIGNUM * a , unsigned char * to ) ;
+ int BN_bn2binpad ( const BIGNUM * a , unsigned char * to , int tolen ) ;
+ BIGNUM * BN_lebin2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2lebinpad ( const BIGNUM * a , unsigned char * to , int tolen ) ;
+ BIGNUM * BN_mpi2bn ( const unsigned char * s , int len , BIGNUM * ret ) ;
+ int BN_bn2mpi ( const BIGNUM * a , unsigned char * to ) ;
+ int BN_sub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_usub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_uadd ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_add ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b ) ;
+ int BN_mul ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , BN_CTX * ctx ) ;
+ int BN_sqr ( BIGNUM * r , const BIGNUM * a , BN_CTX * ctx ) ;
+ void BN_set_negative ( BIGNUM * b , int n ) ;
+ int BN_is_negative ( const BIGNUM * b ) ;
+ int BN_div ( BIGNUM * dv , BIGNUM * rem , const BIGNUM * m , const BIGNUM * d , BN_CTX * ctx ) ;
+ # define BN_mod ( rem , m , d , ctx ) BN_div ( NULL , ( rem ) , ( m ) , ( d ) , ( ctx ) ) int BN_nnmod ( BIGNUM * r , const BIGNUM * m , const BIGNUM * d , BN_CTX * ctx ) ;
+ int BN_mod_add ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_add_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m ) ;
+ int BN_mod_sub ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_sub_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m ) ;
+ int BN_mod_mul ( BIGNUM * r , const BIGNUM * a , const BIGNUM * b , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_sqr ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift1 ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift1_quick ( BIGNUM * r , const BIGNUM * a , const BIGNUM * m ) ;
+ int BN_mod_lshift ( BIGNUM * r , const BIGNUM * a , int n , const BIGNUM * m , BN_CTX * ctx ) ;
+ int BN_mod_lshift_quick ( BIGNUM * r , const BIGNUM * a , int n , const BIGNUM * m ) ;
+ BN_ULONG BN_mod_word ( const BIGNUM * a , BN_ULONG w ) ;
+ BN_ULONG BN_div_word ( BIGNUM * a , BN_ULONG w )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- **Scenario**: Division operation on a BIGNUM by a word-sized divisor where the divisor is zero, leading to a division by zero error.
+- **Vulnerability Type**: Arithmetic Exception (Division by Zero)
+- **Vulnerability Trigger**: Calling `BN_div_word` with a `w` parameter equal to zero.
+- **Risky API or Data Flow**: The function `BN_div_word` does not validate that the divisor `w` is non-zero before performing the division operation.
+- **Mutation Suggestions**: Modify the divisor value to zero; change the function to use an uninitialized or user-controlled variable as the divisor; introduce a conditional path that sets the divisor to zero based on input.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+#include <openssl/bn.h>
+
+int custom_bn_mod_inverse_word(BIGNUM *r, const BIGNUM *a, BN_ULONG mod) {
+    BIGNUM *tmp = BN_new();
+    if (tmp == NULL) return 0;
+    
+    // Direct division by mod without zero check
+    BN_ULONG remainder = BN_mod_word(a, mod);
+    if (remainder == 0) {
+        BN_set_word(r, 0);
+        BN_free(tmp);
+        return 1;
+    }
+    
+    // Compute modular inverse using naive method
+    for (BN_ULONG i = 1; i < mod; i++) {
+        if ((i * remainder) % mod == 1) {
+            BN_set_word(r, i);
+            BN_free(tmp);
+            return 1;
+        }
+    }
+    
+    BN_free(tmp);
+    return 0; // No inverse exists
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+BN_ULONG bn_scaled_division(const BIGNUM *numerator, BN_ULONG denominator, int scale_factor) {
+    BIGNUM *scaled = BN_new();
+    BN_ULONG result;
+    
+    if (scaled == NULL) return 0;
+    
+    // Scale numerator by factor
+    BN_copy(scaled, numerator);
+    BN_mul_word(scaled, scale_factor);
+    
+    // Division without denominator validation
+    result = BN_div_word(scaled, denominator);
+    
+    BN_free(scaled);
+    return result;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+int compute_rational_approximation(BIGNUM *num, BIGNUM *den, const BIGNUM *value, BN_ULONG precision) {
+    BIGNUM *tmp = BN_new();
+    if (tmp == NULL) return 0;
+    
+    // Multiply value by precision
+    BN_copy(num, value);
+    BN_mul_word(num, precision);
+    
+    // Set denominator directly to precision (could be zero)
+    BN_set_word(den, precision);
+    
+    // Normalize by dividing both by GCD
+    BN_copy(tmp, num);
+    BN_div_word(tmp, precision); // Vulnerability here if precision == 0
+    
+    BN_free(tmp);
+    return 1;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+BN_ULONG adaptive_division(BIGNUM *dividend, BN_ULONG *divisors, int count) {
+    BN_ULONG result = 0;
+    BIGNUM *accumulator = BN_new();
+    
+    if (accumulator == NULL) return 0;
+    
+    BN_copy(accumulator, dividend);
+    
+    for (int i = 0; i < count; i++) {
+        // Use divisor from array without validation
+        BN_ULONG current_divisor = divisors[i];
+        result = BN_div_word(accumulator, current_divisor);
+        
+        if (BN_is_zero(accumulator)) {
+            break;
+        }
+    }
+    
+    BN_free(accumulator);
+    return result;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+#include <openssl/bn.h>
+
+int bn_mod_inverse_word(BIGNUM *out, const BIGNUM *a, BN_ULONG mod) {
+    BIGNUM *tmp = BN_new();
+    BN_ULONG rem;
+    
+    if (tmp == NULL || out == NULL || a == NULL) {
+        if (tmp) BN_free(tmp);
+        return 0;
+    }
+    
+    // Compute a mod mod - no check for mod == 0
+    rem = BN_mod_word(a, mod);
+    
+    // If remainder is 0, inverse is 0 (edge case)
+    if (rem == 0) {
+        BN_set_word(out, 0);
+        BN_free(tmp);
+        return 1;
+    }
+    
+    // Search for modular inverse via linear scan
+    for (BN_ULONG inv = 1; inv < mod; ++inv) {
+        if ((inv * rem) % mod == 1) {
+            BN_set_word(out, inv);
+            BN_free(tmp);
+            return 1;
+        }
+    }
+    
+    BN_free(tmp);
+    return 0; // No inverse
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+BN_ULONG scaled_ratio(const BIGNUM *numerator, BN_ULONG denominator, unsigned int scale) {
+    BIGNUM *scaled_num = BN_new();
+    BN_ULONG quotient;
+    
+    if (scaled_num == NULL || numerator == NULL) {
+        return 0;
+    }
+    
+    // Scale the numerator
+    if (!BN_copy(scaled_num, numerator)) {
+        BN_free(scaled_num);
+        return 0;
+    }
+    if (!BN_mul_word(scaled_num, scale)) {
+        BN_free(scaled_num);
+        return 0;
+    }
+    
+    // Perform division - denominator may be zero
+    quotient = BN_div_word(scaled_num, denominator);
+    
+    BN_free(scaled_num);
+    return quotient;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+int rational_approx(BIGNUM *approx, const BIGNUM *real, BN_ULONG prec) {
+    BIGNUM *num = BN_new();
+    BIGNUM *den = BN_new();
+    
+    if (num == NULL || den == NULL || approx == NULL || real == NULL) {
+        if (num) BN_free(num);
+        if (den) BN_free(den);
+        return 0;
+    }
+    
+    // Approximate real as numerator/denominator
+    if (!BN_copy(num, real)) goto err;
+    if (!BN_mul_word(num, prec)) goto err;   // numerator = real * prec
+    
+    // Denominator is prec (could be zero)
+    if (!BN_set_word(den, prec)) goto err;
+    
+    // Simplify by dividing numerator by denominator (vulnerable if prec == 0)
+    if (BN_div_word(num, prec) == (BN_ULONG)-1) goto err;
+    
+    // Store result
+    if (!BN_copy(approx, num)) goto err;
+    
+    BN_free(num);
+    BN_free(den);
+    return 1;
+    
+err:
+    BN_free(num);
+    BN_free(den);
+    return 0;
+}
+```
+
+```c
+#include <openssl/bn.h>
+
+BN_ULONG chained_division(BIGNUM *value, const BN_ULONG *divisors, int ndiv) {
+    BIGNUM *acc = BN_new();
+    BN_ULONG last_result = 0;
+    int i;
+    
+    if (acc == NULL || value == NULL || divisors == NULL || ndiv <= 0) {
+        if (acc) BN_free(acc);
+        return 0;
+    }
+    
+    if (!BN_copy(acc, value)) {
+        BN_free(acc);
+        return 0;
+    }
+    
+    for (i = 0; i < ndiv; ++i) {
+        // Each divisor used directly - no zero validation
+        last_result = BN_div_word(acc, divisors[i]);
+        if (BN_is_zero(acc)) {
+            break;
+        }
+    }
+    
+    BN_free(acc);
+    return last_result;
+}
+```
+

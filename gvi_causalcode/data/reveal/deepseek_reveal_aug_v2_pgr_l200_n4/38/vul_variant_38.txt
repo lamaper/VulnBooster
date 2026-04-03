@@ -1,0 +1,443 @@
+System: You are a senior vulnerability researcher. Your task is to generate realistic vulnerable C functions for data augmentation. Preserve plausible software context and vulnerability mechanisms. Do not explain unless explicitly asked. When asked to generate code, output only the requested content.
+PromptMode: pattern_generate_repair
+SeedIndex: 38
+SeedId: unknown
+SeedFile: vul_variant_38.txt
+Model: deepseek-chat
+
+=== User Turn 1 ===
+You are given one vulnerable seed function.
+```c
+static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new ( sk_ ## t1 ## _compfunc compare ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new ( ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new_null ( void ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new_null ( ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _new_reserve ( sk_ ## t1 ## _compfunc compare , int n ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_new_reserve ( ( OPENSSL_sk_compfunc ) compare , n ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _reserve ( STACK_OF ( t1 ) * sk , int n ) {
+ return OPENSSL_sk_reserve ( ( OPENSSL_STACK * ) sk , n ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _free ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_free ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _zero ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_zero ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete ( STACK_OF ( t1 ) * sk , int i ) {
+ return ( t2 * ) OPENSSL_sk_delete ( ( OPENSSL_STACK * ) sk , i ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _delete_ptr ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_delete_ptr ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _push ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_push ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _unshift ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_unshift ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _pop ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_pop ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _shift ( STACK_OF ( t1 ) * sk ) {
+ return ( t2 * ) OPENSSL_sk_shift ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _pop_free ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _freefunc freefunc ) {
+ OPENSSL_sk_pop_free ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _insert ( STACK_OF ( t1 ) * sk , t2 * ptr , int idx ) {
+ return OPENSSL_sk_insert ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr , idx ) ;
+ }
+ static ossl_inline t2 * sk_ ## t1 ## _set ( STACK_OF ( t1 ) * sk , int idx , t2 * ptr ) {
+ return ( t2 * ) OPENSSL_sk_set ( ( OPENSSL_STACK * ) sk , idx , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _find_ex ( STACK_OF ( t1 ) * sk , t2 * ptr ) {
+ return OPENSSL_sk_find_ex ( ( OPENSSL_STACK * ) sk , ( const void * ) ptr ) ;
+ }
+ static ossl_inline void sk_ ## t1 ## _sort ( STACK_OF ( t1 ) * sk ) {
+ OPENSSL_sk_sort ( ( OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline int sk_ ## t1 ## _is_sorted ( const STACK_OF ( t1 ) * sk ) {
+ return OPENSSL_sk_is_sorted ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _dup ( const STACK_OF ( t1 ) * sk ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_dup ( ( const OPENSSL_STACK * ) sk ) ;
+ }
+ static ossl_inline STACK_OF ( t1 ) * sk_ ## t1 ## _deep_copy ( const STACK_OF ( t1 ) * sk , sk_ ## t1 ## _copyfunc copyfunc , sk_ ## t1 ## _freefunc freefunc ) {
+ return ( STACK_OF ( t1 ) * ) OPENSSL_sk_deep_copy ( ( const OPENSSL_STACK * ) sk , ( OPENSSL_sk_copyfunc ) copyfunc , ( OPENSSL_sk_freefunc ) freefunc ) ;
+ }
+ static ossl_inline sk_ ## t1 ## _compfunc sk_ ## t1 ## _set_cmp_func ( STACK_OF ( t1 ) * sk , sk_ ## t1 ## _compfunc compare ) {
+ return ( sk_ ## t1 ## _compfunc ) OPENSSL_sk_set_cmp_func ( ( OPENSSL_STACK * ) sk , ( OPENSSL_sk_compfunc ) compare ) ;
+ }
+ # define DEFINE_SPECIAL_STACK_OF ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , t2 , t2 ) # define DEFINE_STACK_OF ( t ) SKM_DEFINE_STACK_OF ( t , t , t ) # define DEFINE_SPECIAL_STACK_OF_CONST ( t1 , t2 ) SKM_DEFINE_STACK_OF ( t1 , const t2 , t2 ) # define DEFINE_STACK_OF_CONST ( t ) SKM_DEFINE_STACK_OF ( t , const t , t ) typedef char * OPENSSL_STRING ;
+ typedef const char * OPENSSL_CSTRING ;
+ DEFINE_SPECIAL_STACK_OF ( OPENSSL_STRING , char )
+```
+First summarize the vulnerable behavior using the following headings only:
+- Scenario
+- Vulnerability Type
+- Vulnerability Trigger
+- Risky API or Data Flow
+- Mutation Suggestions
+
+=== Assistant Turn 1 ===
+- Scenario
+  Inline stack manipulation macros for OpenSSL that can be instantiated with arbitrary types, potentially leading to type confusion or memory corruption when misused with incompatible type parameters.
+
+- Vulnerability Type
+  Type confusion due to unsafe macro expansion and casting, potentially leading to memory corruption.
+
+- Vulnerability Trigger
+  Instantiating the stack macros with mismatched types for t1 and t2, or using the stack functions with incorrect element types, causing improper pointer casting and memory access.
+
+- Risky API or Data Flow
+  The macro `DEFINE_SPECIAL_STACK_OF(t1, t2)` and associated inline functions that cast between `t2*` and `void*` without type safety, particularly in functions like `sk_##t1##_push`, `sk_##t1##_pop`, and `sk_##t1##_set`.
+
+- Mutation Suggestions
+  Alter type parameters in macro instantiation, modify pointer casting logic, introduce incorrect size calculations, or simulate misuse in stack operations like insertion or deletion with out-of-bounds indices.
+
+=== User Turn 2 ===
+Now generate exactly 4 new vulnerable C functions that follow the summarized vulnerability pattern. Keep them realistic, self-contained, and diverse. Output only fenced ```c``` code blocks.
+
+=== Assistant Turn 2 ===
+```c
+#include <openssl/safestack.h>
+
+DEFINE_SPECIAL_STACK_OF(CUSTOM_OBJ, void)
+
+int process_custom_stack(STACK_OF(CUSTOM_OBJ) *stack, void **data_array, int count) {
+    if (!stack || !data_array) return -1;
+    
+    for (int i = 0; i < count; i++) {
+        // Type confusion: pushing void* pointers that may not be CUSTOM_OBJ*
+        if (sk_CUSTOM_OBJ_push(stack, data_array[i]) <= 0) {
+            return -1;
+        }
+    }
+    
+    // Later access assumes CUSTOM_OBJ structure
+    for (int i = 0; i < sk_CUSTOM_OBJ_num(stack); i++) {
+        CUSTOM_OBJ *obj = sk_CUSTOM_OBJ_value(stack, i);
+        // Potential memory corruption if data_array contained non-CUSTOM_OBJ pointers
+        if (obj->type != EXPECTED_TYPE) {
+            return -2;
+        }
+    }
+    return 0;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+
+typedef struct {
+    int id;
+    char *name;
+    size_t data_len;
+} DATA_ENTRY;
+
+DEFINE_SPECIAL_STACK_OF(DATA_STACK, unsigned char)
+
+int store_data_entries(STACK_OF(DATA_STACK) *stack, DATA_ENTRY *entries, int num_entries) {
+    if (!stack || !entries) return -1;
+    
+    for (int i = 0; i < num_entries; i++) {
+        // Dangerous: casting DATA_ENTRY* to unsigned char* loses type information
+        unsigned char *raw_ptr = (unsigned char *)&entries[i];
+        if (sk_DATA_STACK_push(stack, raw_ptr) <= 0) {
+            return -1;
+        }
+    }
+    
+    // Retrieval assumes unsigned char* but original was DATA_ENTRY*
+    for (int i = 0; i < sk_DATA_STACK_num(stack); i++) {
+        unsigned char *data = sk_DATA_STACK_value(stack, i);
+        // Type confusion: treating raw bytes as DATA_ENTRY without proper cast
+        DATA_ENTRY *entry = (DATA_ENTRY *)data;
+        if (entry->data_len > MAX_ALLOWED) {  // May access invalid memory
+            return -2;
+        }
+    }
+    return 0;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+
+typedef struct {
+    int *buffer;
+    size_t size;
+} DYNAMIC_BUFFER;
+
+DEFINE_SPECIAL_STACK_OF(BUFFER_STACK, int)
+
+int manipulate_buffer_stack(STACK_OF(BUFFER_STACK) *stack, DYNAMIC_BUFFER *buffers, int count) {
+    if (!stack || !buffers) return -1;
+    
+    // Incorrect macro usage: storing DYNAMIC_BUFFER* in stack defined for int*
+    for (int i = 0; i < count; i++) {
+        // Type confusion: pushing pointer to struct where int* is expected
+        if (sk_BUFFER_STACK_push(stack, (int *)&buffers[i]) <= 0) {
+            return -1;
+        }
+    }
+    
+    // Dangerous retrieval: treating struct pointer as int pointer array
+    for (int i = 0; i < sk_BUFFER_STACK_num(stack); i++) {
+        int *buffer_ptr = sk_BUFFER_STACK_value(stack, i);
+        // Buffer overflow: accessing memory beyond intended bounds
+        for (int j = 0; j < 10; j++) {
+            buffer_ptr[j] = j;  // May corrupt adjacent memory
+        }
+    }
+    return 0;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+
+typedef struct {
+    void *payload;
+    int payload_type;
+} GENERIC_CONTAINER;
+
+DEFINE_SPECIAL_STACK_OF(CONTAINER_STACK, GENERIC_CONTAINER)
+
+int unsafe_container_operations(STACK_OF(CONTAINER_STACK) *src, STACK_OF(CONTAINER_STACK) *dst) {
+    if (!src || !dst) return -1;
+    
+    // Deep copy with mismatched copy/free functions
+    STACK_OF(CONTAINER_STACK) *copied = sk_CONTAINER_STACK_deep_copy(
+        src,
+        (sk_CONTAINER_STACK_copyfunc)OPENSSL_sk_deep_copy,  // Wrong copy function
+        (sk_CONTAINER_STACK_freefunc)OPENSSL_sk_free        // Wrong free function
+    );
+    
+    if (!copied) return -1;
+    
+    // Type confusion in deletion: index may be out of bounds
+    for (int i = sk_CONTAINER_STACK_num(copied) - 1; i >= 0; i--) {
+        GENERIC_CONTAINER *container = sk_CONTAINER_STACK_delete(copied, i);
+        if (container) {
+            // Improper cleanup: assumes payload is heap-allocated but could be anything
+            free(container->payload);  // Potential double-free or free of non-heap memory
+        }
+    }
+    
+    sk_CONTAINER_STACK_free(copied);
+    return 0;
+}
+```
+
+=== User Turn 3 ===
+Review your previous 4 functions. Remove weak or obviously broken samples, then rewrite as needed so the final set remains vulnerable, syntactically plausible C, and diverse in identifiers, branches, and local context. Output only the final fenced ```c``` code blocks.
+
+=== Assistant Turn 3 ===
+```c
+#include <openssl/safestack.h>
+
+typedef struct {
+    int session_id;
+    unsigned char *key_material;
+    size_t key_len;
+} SESSION_DATA;
+
+DEFINE_SPECIAL_STACK_OF(SESSION_STACK, unsigned char)
+
+int store_session_keys(SESSION_DATA *sessions, int num_sessions) {
+    STACK_OF(SESSION_STACK) *stack = sk_SESSION_STACK_new_null();
+    if (!stack) return -1;
+    
+    for (int i = 0; i < num_sessions; i++) {
+        // Type confusion: pushing unsigned char* pointer where SESSION_DATA* is expected
+        // The stack is defined for unsigned char elements but we store SESSION_DATA pointers
+        if (sk_SESSION_STACK_push(stack, (unsigned char *)&sessions[i]) <= 0) {
+            sk_SESSION_STACK_free(stack);
+            return -2;
+        }
+    }
+    
+    // Later retrieval assumes unsigned char* but original was SESSION_DATA*
+    for (int i = 0; i < sk_SESSION_STACK_num(stack); i++) {
+        unsigned char *data = sk_SESSION_STACK_value(stack, i);
+        // Dangerous cast: treating raw session data as key material
+        SESSION_DATA *session = (SESSION_DATA *)data;
+        
+        // Memory corruption: accessing key_material field at wrong offset
+        if (session->key_len > 0) {
+            // May read from arbitrary memory location
+            unsigned char first_byte = session->key_material[0];
+            if (first_byte == 0xFF) {
+                sk_SESSION_STACK_free(stack);
+                return -3;
+            }
+        }
+    }
+    
+    sk_SESSION_STACK_free(stack);
+    return 0;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <string.h>
+
+typedef struct {
+    char *domain;
+    int trust_level;
+    void *cert_data;
+} TRUST_ANCHOR;
+
+DEFINE_SPECIAL_STACK_OF(TRUST_STACK, char)
+
+int process_trust_anchors(TRUST_ANCHOR *anchors, int count) {
+    STACK_OF(TRUST_STACK) *stack = sk_TRUST_STACK_new_null();
+    if (!stack) return -1;
+    
+    // Type confusion: storing TRUST_ANCHOR* in char* stack
+    for (int i = 0; i < count; i++) {
+        // Misuse: casting struct pointer to char* for stack storage
+        char *anchor_as_chars = (char *)&anchors[i];
+        if (sk_TRUST_STACK_push(stack, anchor_as_chars) <= 0) {
+            sk_TRUST_STACK_free(stack);
+            return -2;
+        }
+    }
+    
+    // Find operation with mismatched types
+    for (int i = 0; i < count; i++) {
+        // Searching for struct pointer using char* comparison
+        char *search_key = (char *)&anchors[i];
+        int idx = sk_TRUST_STACK_find(stack, search_key);
+        
+        if (idx >= 0) {
+            // Retrieval continues the type confusion
+            char *found = sk_TRUST_STACK_value(stack, idx);
+            TRUST_ANCHOR *anchor = (TRUST_ANCHOR *)found;
+            
+            // Buffer overflow risk: treating domain as null-terminated when it might not be
+            if (strlen(anchor->domain) > MAX_DOMAIN_LEN) {
+                sk_TRUST_STACK_free(stack);
+                return -3;
+            }
+        }
+    }
+    
+    sk_TRUST_STACK_free(stack);
+    return 0;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+#include <stdlib.h>
+
+typedef struct {
+    int *coefficients;
+    int degree;
+} POLYNOMIAL;
+
+DEFINE_SPECIAL_STACK_OF(POLY_STACK, int)
+
+int evaluate_polynomial_stack(POLYNOMIAL *polys, int num_polys, int x) {
+    STACK_OF(POLY_STACK) *stack = sk_POLY_STACK_new_null();
+    if (!stack) return -1;
+    
+    // Dangerous: storing POLYNOMIAL* pointers in int* stack
+    for (int i = 0; i < num_polys; i++) {
+        // Type confusion: struct pointer cast to int*
+        int *poly_as_ints = (int *)&polys[i];
+        if (sk_POLY_STACK_push(stack, poly_as_ints) <= 0) {
+            sk_POLY_STACK_free(stack);
+            return -2;
+        }
+    }
+    
+    int total = 0;
+    for (int i = 0; i < sk_POLY_STACK_num(stack); i++) {
+        int *data = sk_POLY_STACK_value(stack, i);
+        // Incorrect interpretation: treating struct as coefficient array
+        POLYNOMIAL *poly = (POLYNOMIAL *)data;
+        
+        // Memory corruption: accessing coefficients array which may be at wrong offset
+        for (int j = 0; j <= poly->degree; j++) {
+            // May read from arbitrary memory locations
+            total += poly->coefficients[j] * (j + 1);
+        }
+    }
+    
+    // Unsafe deletion with potential out-of-bounds access
+    while (sk_POLY_STACK_num(stack) > 0) {
+        int *ptr = sk_POLY_STACK_pop(stack);
+        // No way to properly free the original POLYNOMIAL from int* pointer
+    }
+    
+    sk_POLY_STACK_free(stack);
+    return total;
+}
+```
+
+```c
+#include <openssl/safestack.h>
+
+typedef struct {
+    void *context;
+    size_t context_size;
+    int (*handler)(void *);
+} PLUGIN_MODULE;
+
+DEFINE_SPECIAL_STACK_OF(MODULE_STACK, PLUGIN_MODULE)
+
+int manage_plugin_modules(PLUGIN_MODULE *modules, int module_count) {
+    STACK_OF(MODULE_STACK) *stack = sk_MODULE_STACK_new_null();
+    if (!stack) return -1;
+    
+    // Correct type usage initially
+    for (int i = 0; i < module_count; i++) {
+        if (sk_MODULE_STACK_push(stack, &modules[i]) <= 0) {
+            sk_MODULE_STACK_free(stack);
+            return -2;
+        }
+    }
+    
+    // Dangerous: changing comparison function after elements are inserted
+    sk_MODULE_STACK_set_cmp_func(stack, (sk_MODULE_STACK_compfunc)strcmp);
+    
+    // Sort with mismatched comparison function
+    sk_MODULE_STACK_sort(stack);
+    
+    // Find operation with wrong comparison logic
+    PLUGIN_MODULE search_key;
+    search_key.context = "default";
+    int idx = sk_MODULE_STACK_find(stack, &search_key);
+    
+    if (idx >= 0) {
+        // Deletion returns PLUGIN_MODULE* but stack operations may corrupt ordering
+        PLUGIN_MODULE *removed = sk_MODULE_STACK_delete(stack, idx);
+        
+        // Type confusion in deep copy: wrong copy function signature
+        STACK_OF(MODULE_STACK) *backup = sk_MODULE_STACK_deep_copy(
+            stack,
+            (sk_MODULE_STACK_copyfunc)memcpy,  // Wrong: memcpy doesn't match expected signature
+            NULL
+        );
+        
+        if (backup) {
+            // Memory leak or corruption due to improper copy
+            sk_MODULE_STACK_free(backup);
+        }
+    }
+    
+    sk_MODULE_STACK_free(stack);
+    return 0;
+}
+```
+
