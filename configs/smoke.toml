@@ -1,0 +1,57 @@
+[project]
+name = "vulnbooster"
+root_dir = ".."
+dataset_variant = "smoke"
+iteration = 1
+
+[paths]
+dataset_dir = "dataset"
+smoke_dir = "smoke"
+slice_dir = "slice"
+model_dir = "artifacts/models"
+cache_dir = "artifacts/cache"
+
+[runtime]
+hf_endpoint = "https://hf-mirror.com"
+
+[training]
+model_name = "microsoft/codebert-base"
+batch_size = 16
+learning_rate = 2e-5
+epochs = 2
+max_length = 512
+prediction_threshold = 0.5
+seed = 42
+weight_decay = 0.01
+
+[loss]
+focal_alpha = 0.85
+focal_gamma = 2.0
+label_smoothing = 0.1
+focal_lambda_start = 0.80
+focal_lambda_min = 0.60
+focal_lambda_decay = 0.02
+
+[static_slice]
+joern_parse_cmd = "joern-parse"
+joern_cmd = "joern"
+slice_script = "slice/slice.sc"
+parse_timeout_seconds = 300
+slice_timeout_seconds = 600
+
+[llm]
+provider = "deepseek"
+base_url = "https://api.deepseek.com"
+model_name = "deepseek-coder"
+api_key_env = "VULNBOOSTER_API_KEY"
+concurrency_limit = 64
+max_retries = 3
+retry_delay_seconds = 2.0
+temperature = 0.1
+max_tokens = 2048
+
+[augmentation]
+generate_k = 3
+
+[cwe]
+cache_file = "code/cwe_knowledge_cache.json"

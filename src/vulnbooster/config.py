@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import tomllib
+
+
+@dataclass(slots=True)
+class ProjectConfig:
+    name: str
+    root_dir: Path
+    dataset_variant: str
+    iteration: int
+
+
+@dataclass(slots=True)
+class PathConfig:
+    dataset_dir: Path
+    smoke_dir: Path
+    slice_dir: Path
+    model_dir: Path
+    cache_dir: Path
+
+
+@dataclass(slots=True)
+class RuntimeConfig:
+    hf_endpoint: str
+
+
+@dataclass(slots=True)
+class TrainingConfig:
+    model_name: str
+    batch_size: int
+    learning_rate: float
+    epochs: int
+    max_length: int
+    prediction_threshold: float
+    seed: int
+    weight_decay: float
+
+
+@dataclass(slots=True)
+class LossConfig:
+    focal_alpha: float
+    focal_gamma: float
+    label_smoothing: float
+    focal_lambda_start: float
+    focal_lambda_min: float
+    focal_lambda_decay: float
+
+
+@dataclass(slots=True)
+class StaticSliceConfig:
+    joern_parse_cmd: str
+    joern_cmd: str
+    slice_script: Path
+    parse_timeout_seconds: int
+    slice_timeout_seconds: int
+
+
+@dataclass(slots=True)
+class LLMConfig:
+    provider: str
+    base_url: str
+    model_name: str
+    api_key_env: str
+    concurrency_limit: int
+    max_retries: int
+    retry_delay_seconds: float
+    temperature: float
+    max_tokens: int
+
+
+@dataclass(slots=True)
+class AugmentationConfig:
+    generate_k: int
+
+
+@dataclass(slots=True)
+class CWEConfig:
+    cache_file: Path
+
+
+@dataclass(slots=True)
+class ExperimentConfig:
+    project: ProjectConfig
+    paths: PathConfig
+    runtime: RuntimeConfig
+    training: TrainingConfig
+    loss: LossConfig
+    static_slice: StaticSliceConfig
+    llm: LLMConfig
+    augmentation: AugmentationConfig
+    cwe: CWEConfig
+
+    @property
+    def root_dir(self) -> Path:
+        return self.project.root_dir
+
+    def dataset_split_path(self, split: str, cleaned: bool = False) -> Path:
+        base_dir = self.paths.smoke_dir if self.project.dataset_variant == "smoke" else self.paths.dataset_dir
+        suffix = "_cleaned" if cleaned else ""
+        return self.root_dir / base_dir / f"primevul_{split}{suffix}.jsonl"
+
+    def slice_output_path(self, name: str) -> Path:
+        variant_dir = "smoke" if self.project.dataset_variant == "smoke" else "deepseek"
+        return self.root_dir / self.paths.slice_dir / variant_dir / name
+
+
+def _resolve(root: Path, value: str) -> Path:
+    return (root / value).resolve()
+
+
+def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
+    config_file = Path(config_path).resolve()
+    raw = tomllib.loads(config_file.read_text(encoding="utf-8"))
+
+    project_root = _resolve(config_file.parent, raw["project"]["root_dir"])
+
+    return ExperimentConfig(
+        project=ProjectConfig(
+            name=raw["project"]["name"],
+            root_dir=project_root,
+            dataset_variant=raw["project"]["dataset_variant"],
+            iteration=int(raw["project"]["iteration"]),
+        ),
+        paths=PathConfig(
+            dataset_dir=Path(raw["paths"]["dataset_dir"]),
+            smoke_dir=Path(raw["paths"]["smoke_dir"]),
+            slice_dir=Path(raw["paths"]["slice_dir"]),
+            model_dir=Path(raw["paths"]["model_dir"]),
+            cache_dir=Path(raw["paths"]["cache_dir"]),
+        ),
+        runtime=RuntimeConfig(hf_endpoint=raw["runtime"]["hf_endpoint"]),
+        training=TrainingConfig(**raw["training"]),
+        loss=LossConfig(**raw["loss"]),
+        static_slice=StaticSliceConfig(
+            joern_parse_cmd=raw["static_slice"]["joern_parse_cmd"],
+            joern_cmd=raw["static_slice"]["joern_cmd"],
+            slice_script=_resolve(project_root, raw["static_slice"]["slice_script"]),
+            parse_timeout_seconds=int(raw["static_slice"]["parse_timeout_seconds"]),
+            slice_timeout_seconds=int(raw["static_slice"]["slice_timeout_seconds"]),
+        ),
+        llm=LLMConfig(**raw["llm"]),
+        augmentation=AugmentationConfig(**raw["augmentation"]),
+        cwe=CWEConfig(cache_file=_resolve(project_root, raw["cwe"]["cache_file"])),
+    )
