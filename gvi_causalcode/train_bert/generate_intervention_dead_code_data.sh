@@ -1,1 +1,0 @@
-python attacker4simple.py --task reveal --enhance_method CausalCode --attack_type dead_code --gpu 0

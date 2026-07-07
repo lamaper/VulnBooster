@@ -1,1 +1,0 @@
-cppcheck --enable=all  --xml ./raw_code 2> cppcheck.xml
