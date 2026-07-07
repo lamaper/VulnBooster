@@ -37,35 +37,7 @@ docs/references/*.pdf
 *.bin
 *.ckpt
 *.wandb
-gvi_causalcode/evaluation/linevul/code/linevul/saved_models/
 
-# Packaged datasets and preprocessing outputs
-gvi_causalcode/data/devign/*.json
-gvi_causalcode/data/reveal/*.json
-gvi_causalcode/data/**/dataset/
-gvi_causalcode/data_raw/
-gvi_causalcode/evaluation/linevul/code/linevul/*.csv
-gvi_causalcode/evaluation/linevul/code/linevul/ifa_records/
-gvi_causalcode/evaluation/linevul/code/linevul/results/
-gvi_causalcode/evaluation/linevul/code/cppcheck/output.txt
+dataset/*.jsonl
 
-# Tokenizer artifacts that can be regenerated
-gvi_causalcode/evaluation/linevul/code/linevul/bpe_tokenizer/
-gvi_causalcode/evaluation/linevul/code/linevul/word_level_tokenizer/
-
-# Generated augmentation outputs
-gvi_causalcode/data/reveal/chain_reveal_gemini/
-gvi_causalcode/data/reveal/chain_reveal_gemini_result/
-gvi_causalcode/generation/similarity_hist.png
-
-# Static-check generated content and third-party tool outputs
-gvi_causalcode/generation/static_check/**/raw_code/
-gvi_causalcode/generation/static_check/**/result_data/
-gvi_causalcode/generation/static_check/**/*.xml
-gvi_causalcode/generation/static_check/**/*.csv
-gvi_causalcode/generation/static_check/**/*.txt
-gvi_causalcode/generation/static_check/**/*.o
-gvi_causalcode/generation/static_check/**/config.log
-gvi_causalcode/generation/static_check/**/config.status
-gvi_causalcode/generation/static_check/**/rats
-gvi_causalcode/generation/static_check/**/tscancode
+slice/*.sc
