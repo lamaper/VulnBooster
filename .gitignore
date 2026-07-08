@@ -21,6 +21,10 @@ env/
 !.env.example
 !**/.env.example
 
+# Local runtime state
+artifacts/
+smoke/*.jsonl
+
 # Logs / experiment output
 *.log
 wandb/

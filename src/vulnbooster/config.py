@@ -40,6 +40,17 @@ class TrainingConfig:
 
 
 @dataclass(slots=True)
+class LineSlicerConfig:
+    model_name: str
+    batch_size: int
+    learning_rate: float
+    epochs: int
+    max_length: int
+    threshold: float
+    context_radius: int
+
+
+@dataclass(slots=True)
 class LossConfig:
     focal_alpha: float
     focal_gamma: float
@@ -87,6 +98,7 @@ class ExperimentConfig:
     paths: PathConfig
     runtime: RuntimeConfig
     training: TrainingConfig
+    line_slicer: LineSlicerConfig
     loss: LossConfig
     static_slice: StaticSliceConfig
     llm: LLMConfig
@@ -133,6 +145,7 @@ def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
         ),
         runtime=RuntimeConfig(hf_endpoint=raw["runtime"]["hf_endpoint"]),
         training=TrainingConfig(**raw["training"]),
+        line_slicer=LineSlicerConfig(**raw["line_slicer"]),
         loss=LossConfig(**raw["loss"]),
         static_slice=StaticSliceConfig(
             joern_parse_cmd=raw["static_slice"]["joern_parse_cmd"],

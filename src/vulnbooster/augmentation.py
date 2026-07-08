@@ -52,7 +52,7 @@ class CoTAugmenter:
             matches = re.findall(r"```[a-zA-Z]*\s*(.*?)```", response, flags=re.DOTALL)
             return [match.strip() for match in matches if match.strip()]
 
-    def run(self, input_path: Path, output_path: Path, code_field_priority: tuple[str, ...] = ("refined_code", "llm_slice", "func")) -> dict[str, int]:
+    def run(self, input_path: Path, output_path: Path, code_field_priority: tuple[str, ...] = ("refined_code", "line_slice", "llm_slice", "func")) -> dict[str, int]:
         rows = list(iter_jsonl(input_path))
 
         def pick_code(row: dict[str, Any]) -> str:
@@ -135,7 +135,7 @@ class CWEAugmenter:
         matches = re.findall(TICK3 + r"(?:cpp|c|c\+\+)?\s*\n(.*?)\n\s*" + TICK3, text_no_think, flags=re.DOTALL | re.IGNORECASE)
         return [match.strip() for match in matches if match.strip()]
 
-    def run(self, input_path: Path, output_path: Path, code_field_priority: tuple[str, ...] = ("refined_code", "llm_slice", "func")) -> dict[str, int]:
+    def run(self, input_path: Path, output_path: Path, code_field_priority: tuple[str, ...] = ("refined_code", "line_slice", "llm_slice", "func")) -> dict[str, int]:
         rows = [row for row in iter_jsonl(input_path) if row.get("target") == 1]
 
         def pick_code(row: dict[str, Any]) -> str:

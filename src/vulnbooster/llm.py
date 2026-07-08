@@ -9,6 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
 
+from .code_utils import stitch_function_header
 from .config import ExperimentConfig
 from .jsonl import iter_jsonl, write_jsonl
 
@@ -37,26 +38,6 @@ def extract_code_block(response_text: str, min_length: int = 10) -> tuple[str, b
     if len(extracted) < min_length:
         return "", False
     return extracted, True
-
-
-def stitch_function_header(refined_code: str, original_code: str) -> str:
-    if not refined_code or not original_code:
-        return refined_code
-
-    first_line = refined_code.strip().split("\n")[0].strip()
-    missing_header = False
-    if re.match(r"^(if|while|for|return|switch|else|do|try|catch)\b", first_line, re.IGNORECASE):
-        missing_header = True
-    elif not re.search(r"\w+\s*\(.*?\)", first_line):
-        missing_header = True
-
-    if missing_header:
-        header_match = re.search(r"^(.*?\{)", original_code, re.DOTALL)
-        if header_match:
-            header = header_match.group(1).strip()
-            return f"{header}\n{refined_code}\n}}"
-    return refined_code
-
 
 class DeepSeekChatClient:
     def __init__(self, config: ExperimentConfig):

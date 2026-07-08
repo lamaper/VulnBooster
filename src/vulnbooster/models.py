@@ -13,6 +13,12 @@ CORE_FIELDS = {
     "llm_slice",
     "static_slice",
     "refined_code",
+    "teacher_slice",
+    "line_slice",
+    "line_labels",
+    "matched_teacher_line_numbers",
+    "static_line_numbers",
+    "line_slice_line_numbers",
     "code_lines",
     "raw_lines",
     "fromIdx",
@@ -35,6 +41,7 @@ class CodeSample:
     llm_slice: str = ""
     static_slice: str = ""
     refined_code: str = ""
+    line_slice: str = ""
     extras: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -54,6 +61,7 @@ class CodeSample:
             llm_slice=obj.get("llm_slice", ""),
             static_slice=static_slice,
             refined_code=obj.get("refined_code", ""),
+            line_slice=obj.get("line_slice", ""),
             extras={k: v for k, v in obj.items() if k not in CORE_FIELDS},
         )
 
@@ -71,10 +79,12 @@ class CodeSample:
             payload["static_slice"] = self.static_slice
         if self.refined_code:
             payload["refined_code"] = self.refined_code
+        if self.line_slice:
+            payload["line_slice"] = self.line_slice
         payload.update(self.extras)
         return payload
 
-    def best_available_code(self, order: tuple[str, ...] = ("refined_code", "llm_slice", "static_slice", "func")) -> str:
+    def best_available_code(self, order: tuple[str, ...] = ("refined_code", "line_slice", "llm_slice", "static_slice", "func")) -> str:
         for field_name in order:
             value = getattr(self, field_name, "")
             if isinstance(value, str) and value.strip():
