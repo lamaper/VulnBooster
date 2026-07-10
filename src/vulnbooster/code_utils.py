@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import re
 
 
@@ -7,6 +8,7 @@ FUNCTION_HEADER_PATTERN = re.compile(
     r"^\s*[A-Za-z_~][\w\s\*\:&<>\[\],]*\([^;{}]*\)\s*(?:const\s*)?(?:\{|$)"
 )
 CONTROL_HEADER_PATTERN = re.compile(r"^\s*(if|for|while|switch|return|else|do|catch)\b", re.IGNORECASE)
+DECLARED_FUNCTION_NAME_PATTERN = re.compile(r"^\s*[A-Za-z_~][\w\s\*\:&<>\[\],]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)")
 IDENTIFIER_PATTERN = re.compile(r"\b[A-Za-z_]\w*\b")
 FUNCTION_CALL_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
 
@@ -173,6 +175,29 @@ def extract_code_identifiers(code: str) -> set[str]:
     }
 
 
+def _unique_in_order(tokens: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        ordered.append(token)
+    return ordered
+
+
+def extract_ordered_code_identifiers(code: str) -> list[str]:
+    sanitized = sanitize_generated_function(code)
+    if not sanitized:
+        return []
+    tokens = [
+        token
+        for token in IDENTIFIER_PATTERN.findall(sanitized)
+        if token not in C_LIKE_STOPWORDS and len(token) > 1
+    ]
+    return _unique_in_order(tokens)
+
+
 def extract_function_calls(code: str) -> set[str]:
     sanitized = sanitize_generated_function(code)
     if not sanitized:
@@ -182,6 +207,29 @@ def extract_function_calls(code: str) -> set[str]:
         for token in FUNCTION_CALL_PATTERN.findall(sanitized)
         if token not in C_LIKE_STOPWORDS and len(token) > 1
     }
+
+
+def extract_ordered_function_calls(code: str) -> list[str]:
+    sanitized = sanitize_generated_function(code)
+    if not sanitized:
+        return []
+    tokens = [
+        token
+        for token in FUNCTION_CALL_PATTERN.findall(sanitized)
+        if token not in C_LIKE_STOPWORDS and len(token) > 1
+    ]
+    return _unique_in_order(tokens)
+
+
+def extract_declared_function_name(code: str) -> str:
+    sanitized = sanitize_generated_function(code)
+    if not sanitized:
+        return ""
+    first_line = sanitized.splitlines()[0] if sanitized.splitlines() else ""
+    match = DECLARED_FUNCTION_NAME_PATTERN.match(first_line)
+    if not match:
+        return ""
+    return match.group(1)
 
 
 def overlap_ratio(reference_tokens: set[str], candidate_tokens: set[str]) -> float:
@@ -217,6 +265,74 @@ def compute_code_length_similarity(reference_code: str, candidate_code: str) -> 
     if reference_count <= 0 or candidate_count <= 0:
         return 0.0
     return min(reference_count, candidate_count) / max(reference_count, candidate_count)
+
+
+def build_anchor_signature(
+    prompt_code: str,
+    seed_code: str = "",
+    *,
+    max_identifier_anchors: int = 8,
+    max_call_anchors: int = 4,
+) -> dict[str, list[str]]:
+    sanitized_prompt = sanitize_generated_function(prompt_code)
+    prompt_identifier_tokens = [
+        token
+        for token in IDENTIFIER_PATTERN.findall(sanitized_prompt)
+        if token not in C_LIKE_STOPWORDS and len(token) > 1
+    ] if sanitized_prompt else []
+    prompt_identifier_counts = Counter(prompt_identifier_tokens)
+    prompt_identifier_positions = {token: index for index, token in enumerate(_unique_in_order(prompt_identifier_tokens))}
+    prompt_identifiers = _unique_in_order(prompt_identifier_tokens)
+    prompt_calls = extract_ordered_function_calls(prompt_code)
+    prompt_declared_name = extract_declared_function_name(prompt_code)
+    if prompt_declared_name:
+        prompt_calls = [token for token in prompt_calls if token != prompt_declared_name]
+    seed_identifier_set = extract_code_identifiers(seed_code) if seed_code else set(prompt_identifiers)
+    seed_call_set = extract_function_calls(seed_code) if seed_code else set(prompt_calls)
+    seed_declared_name = extract_declared_function_name(seed_code) if seed_code else ""
+    if seed_declared_name:
+        seed_call_set.discard(seed_declared_name)
+
+    prioritized_calls = [token for token in prompt_calls if token in seed_call_set] or prompt_calls
+    prioritized_identifiers = [token for token in prompt_identifiers if token in seed_identifier_set] or prompt_identifiers
+    prioritized_identifiers = [token for token in prioritized_identifiers if token not in prioritized_calls]
+    prioritized_identifiers.sort(
+        key=lambda token: (
+            -prompt_identifier_counts[token],
+            prompt_identifier_positions.get(token, len(prompt_identifier_positions)),
+        )
+    )
+
+    return {
+        "calls": prioritized_calls[:max_call_anchors],
+        "identifiers": prioritized_identifiers[:max_identifier_anchors],
+    }
+
+
+def compute_anchor_hit_metrics(
+    candidate_code: str,
+    *,
+    anchor_calls: list[str] | None = None,
+    anchor_identifiers: list[str] | None = None,
+) -> dict[str, float | int | list[str] | bool]:
+    candidate_call_set = extract_function_calls(candidate_code)
+    candidate_identifier_set = extract_code_identifiers(candidate_code)
+    anchor_calls = anchor_calls or []
+    anchor_identifiers = anchor_identifiers or []
+
+    matched_calls = [token for token in anchor_calls if token in candidate_call_set]
+    matched_identifiers = [token for token in anchor_identifiers if token in candidate_identifier_set]
+    call_ratio = len(matched_calls) / len(anchor_calls) if anchor_calls else 0.0
+    identifier_ratio = len(matched_identifiers) / len(anchor_identifiers) if anchor_identifiers else 0.0
+    return {
+        "matched_calls": matched_calls,
+        "matched_identifiers": matched_identifiers,
+        "call_hits": len(matched_calls),
+        "identifier_hits": len(matched_identifiers),
+        "call_ratio": call_ratio,
+        "identifier_ratio": identifier_ratio,
+        "has_anchor_signal": bool(matched_calls or matched_identifiers),
+    }
 
 
 def _match_slice_lines_to_original(original_code: str, extracted_code: str) -> tuple[list[int], int]:

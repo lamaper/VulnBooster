@@ -7,6 +7,8 @@ import os
 
 from vulnbooster.cleaning import clean_c_code
 from vulnbooster.code_utils import (
+    build_anchor_signature,
+    compute_anchor_hit_metrics,
     compute_code_length_similarity,
     compute_seed_alignment_metrics,
     ensure_block_balance,
@@ -260,6 +262,46 @@ class LineSlicerTests(unittest.TestCase):
 
         self.assertGreater(compute_code_length_similarity(reference, close), compute_code_length_similarity(reference, far))
 
+    def test_build_anchor_signature_prefers_shared_calls(self) -> None:
+        prompt_code = (
+            "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
+            "{\n"
+            "ptr->location = (char*)gf_malloc((u32) ptr->size);\n"
+            "gf_bs_read_data(bs, ptr->location, (u32)ptr->size);\n"
+            "return GF_OK;\n"
+            "}\n"
+        )
+        seed_code = (
+            "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
+            "{\n"
+            "ptr->location = (char*)gf_malloc((u32) ptr->size);\n"
+            "gf_bs_read_data(bs, ptr->location, (u32)ptr->size);\n"
+            "}\n"
+        )
+        anchors = build_anchor_signature(prompt_code, seed_code, max_identifier_anchors=4, max_call_anchors=2)
+
+        self.assertIn("gf_bs_read_data", anchors["calls"])
+        self.assertIn("ptr", anchors["identifiers"])
+
+    def test_compute_anchor_hit_metrics_detects_anchor_matches(self) -> None:
+        candidate = (
+            "GF_Err sample_box_read(GF_Box *s, GF_BitStream *bs)\n"
+            "{\n"
+            "ptr->sample = (char*)gf_malloc(ptr->size);\n"
+            "gf_bs_read_data(bs, ptr->sample, ptr->size + 1);\n"
+            "return GF_OK;\n"
+            "}\n"
+        )
+        metrics = compute_anchor_hit_metrics(
+            candidate,
+            anchor_calls=["gf_bs_read_data", "other_call"],
+            anchor_identifiers=["ptr", "size", "missing"],
+        )
+
+        self.assertEqual(metrics["call_hits"], 1)
+        self.assertEqual(metrics["identifier_hits"], 2)
+        self.assertTrue(metrics["has_anchor_signal"])
+
 
 class ValidationTests(unittest.TestCase):
     def test_filter_valid_samples_deduplicates_and_skips_seed_copies(self) -> None:
@@ -405,6 +447,59 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(stats["over_seed_budget"], 1)
             self.assertEqual(kept_rows[0]["idx"], "best")
             self.assertEqual(kept_rows[0]["quality_rank_within_seed"], 1)
+
+    def test_filter_valid_samples_requires_anchor_hits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            seed = (
+                "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
+                "{\n"
+                "ptr->location = (char*)gf_malloc((u32) ptr->size);\n"
+                "gf_bs_read_data(bs, ptr->location, (u32)ptr->size);\n"
+                "return GF_OK;\n"
+                "}\n"
+            )
+            generated = [
+                {
+                    "idx": "close",
+                    "func": (
+                        "GF_Err sample_box_read(GF_Box *s, GF_BitStream *bs)\n"
+                        "{\n"
+                        "ptr->sample = (char*)gf_malloc(ptr->size);\n"
+                        "gf_bs_read_data(bs, ptr->sample, ptr->size + 1);\n"
+                        "return GF_OK;\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed,
+                    "augmentation_seed_code": seed,
+                    "augmentation_anchor_calls": ["gf_bs_read_data"],
+                    "augmentation_anchor_identifiers": ["ptr", "size"],
+                },
+                {
+                    "idx": "far",
+                    "func": "int process_data(const int *data, int len) {\nint buffer[4];\nreturn buffer[0];\n}",
+                    "seed_func": seed,
+                    "augmentation_seed_code": seed,
+                    "augmentation_anchor_calls": ["gf_bs_read_data"],
+                    "augmentation_anchor_identifiers": ["ptr", "size"],
+                },
+            ]
+            input_path.write_text("\n".join(__import__("json").dumps(row) for row in generated) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(
+                input_path,
+                output_path,
+                min_anchor_identifier_hits=1,
+                min_anchor_call_hits=1,
+                require_anchor_signal=True,
+            )
+            kept_rows = [__import__("json").loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+            self.assertEqual(stats["kept"], 1)
+            self.assertEqual(stats["low_anchor_signal"], 1)
+            self.assertEqual(kept_rows[0]["idx"], "close")
 
 
 @unittest.skipUnless(HAS_CALIBRATION_DEPS, "calibration dependencies are not installed")

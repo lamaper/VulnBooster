@@ -85,6 +85,11 @@ class LLMConfig:
 @dataclass(slots=True)
 class AugmentationConfig:
     generate_k: int
+    max_identifier_anchors: int
+    max_call_anchors: int
+    min_identifier_anchor_hits: int
+    min_call_anchor_hits: int
+    require_anchor_signal: bool
 
 
 @dataclass(slots=True)

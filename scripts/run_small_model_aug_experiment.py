@@ -65,6 +65,9 @@ def main() -> None:
     parser.add_argument("--augmentation-prompt-min-alignment", type=float, default=0.1)
     parser.add_argument("--augmentation-min-quality-score", type=float, default=0.35)
     parser.add_argument("--augmentation-max-per-seed", type=int, default=1)
+    parser.add_argument("--augmentation-min-anchor-identifier-hits", type=int)
+    parser.add_argument("--augmentation-min-anchor-call-hits", type=int)
+    parser.add_argument("--augmentation-require-anchor-signal", action="store_true")
     args = parser.parse_args()
 
     from vulnbooster.augmentation import CoTAugmenter, CWEAugmenter
@@ -84,6 +87,17 @@ def main() -> None:
     config.training.batch_size = args.detector_batch_size
     config.llm.concurrency_limit = args.llm_concurrency
     config.augmentation.generate_k = args.generate_k
+    min_anchor_identifier_hits = (
+        config.augmentation.min_identifier_anchor_hits
+        if args.augmentation_min_anchor_identifier_hits is None
+        else args.augmentation_min_anchor_identifier_hits
+    )
+    min_anchor_call_hits = (
+        config.augmentation.min_call_anchor_hits
+        if args.augmentation_min_anchor_call_hits is None
+        else args.augmentation_min_anchor_call_hits
+    )
+    require_anchor_signal = args.augmentation_require_anchor_signal or config.augmentation.require_anchor_signal
 
     output_root = Path(args.output_root).resolve()
     data_root = output_root / "data"
@@ -111,6 +125,9 @@ def main() -> None:
             "augmentation_prompt_min_alignment": args.augmentation_prompt_min_alignment,
             "augmentation_min_quality_score": args.augmentation_min_quality_score,
             "augmentation_max_per_seed": args.augmentation_max_per_seed,
+            "augmentation_min_anchor_identifier_hits": min_anchor_identifier_hits,
+            "augmentation_min_anchor_call_hits": min_anchor_call_hits,
+            "augmentation_require_anchor_signal": require_anchor_signal,
         }
     }
 
@@ -216,6 +233,9 @@ def main() -> None:
         min_prompt_alignment=args.augmentation_prompt_min_alignment,
         min_quality_score=args.augmentation_min_quality_score,
         max_per_seed=args.augmentation_max_per_seed,
+        min_anchor_identifier_hits=min_anchor_identifier_hits,
+        min_anchor_call_hits=min_anchor_call_hits,
+        require_anchor_signal=require_anchor_signal,
     )
     merged_train_path = aug_root / "train_augmented.jsonl"
     merge_stats = merge_jsonl(

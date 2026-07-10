@@ -25,7 +25,7 @@ seed = 42
 weight_decay = 0.01
 
 [line_slicer]
-model_name = "Salesforce/codet5-small"
+model_name = "microsoft/codebert-base"
 batch_size = 4
 learning_rate = 2e-5
 epochs = 5
@@ -61,6 +61,11 @@ max_tokens = 2048
 
 [augmentation]
 generate_k = 3
+max_identifier_anchors = 8
+max_call_anchors = 4
+min_identifier_anchor_hits = 2
+min_call_anchor_hits = 1
+require_anchor_signal = true
 
 [cwe]
 cache_file = "code/cwe_knowledge_cache.json"

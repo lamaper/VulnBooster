@@ -10,7 +10,9 @@ import tree_sitter_c
 import tree_sitter_cpp
 
 from .code_utils import (
+    build_anchor_signature,
     compute_code_length_similarity,
+    compute_anchor_hit_metrics,
     compute_seed_alignment_metrics,
     fingerprint_code,
     sanitize_generated_function,
@@ -141,13 +143,15 @@ def _composite_quality_score(
     detector_prob: float | None,
     full_metrics: dict[str, float],
     prompt_metrics: dict[str, float],
+    anchor_metrics: dict[str, float],
     length_similarity: float,
 ) -> float:
     full_score = 0.7 * full_metrics["alignment_score"] + 0.3 * full_metrics["call_overlap"]
     prompt_score = 0.65 * prompt_metrics["alignment_score"] + 0.35 * prompt_metrics["call_overlap"]
+    anchor_score = 0.6 * anchor_metrics["call_ratio"] + 0.4 * anchor_metrics["identifier_ratio"]
     if detector_prob is None:
-        return 0.55 * prompt_score + 0.35 * full_score + 0.10 * length_similarity
-    return 0.45 * detector_prob + 0.35 * prompt_score + 0.15 * full_score + 0.05 * length_similarity
+        return 0.45 * prompt_score + 0.25 * full_score + 0.20 * anchor_score + 0.10 * length_similarity
+    return 0.35 * detector_prob + 0.25 * prompt_score + 0.15 * full_score + 0.20 * anchor_score + 0.05 * length_similarity
 
 
 def _rerank_rows_by_quality(
@@ -168,6 +172,8 @@ def _rerank_rows_by_quality(
             group_rows,
             key=lambda item: (
                 float(item.get("quality_score", 0.0)),
+                float(item.get("quality_anchor_call_hits", 0.0)),
+                float(item.get("quality_anchor_identifier_hits", 0.0)),
                 float(item.get("quality_prompt_call_overlap", 0.0)),
                 float(item.get("quality_prompt_alignment_score", 0.0)),
                 float(item.get("generated_pred_prob_1", -1.0)),
@@ -206,6 +212,9 @@ def filter_valid_samples(
     min_prompt_alignment: float = 0.0,
     min_quality_score: float = 0.0,
     max_per_seed: int | None = None,
+    min_anchor_identifier_hits: int = 0,
+    min_anchor_call_hits: int = 0,
+    require_anchor_signal: bool = False,
 ) -> dict[str, int]:
     rows = list(iter_jsonl(input_path))
     prelim_rows: list[dict] = []
@@ -216,6 +225,8 @@ def filter_valid_samples(
     same_as_seed = 0
     low_seed_alignment = 0
     low_prompt_alignment = 0
+    low_anchor_signal = 0
+    low_anchor_hits = 0
     for row in tqdm(rows, desc="AST Validation", unit="sample"):
         sanitized_code = sanitize_generated_function(row.get("func", ""))
         if not sanitized_code:
@@ -252,6 +263,28 @@ def filter_valid_samples(
         if prompt_seed_code and prompt_alignment_metrics["alignment_score"] < min_prompt_alignment:
             low_prompt_alignment += 1
             continue
+        anchor_calls = list(row.get("augmentation_anchor_calls", []) or [])
+        anchor_identifiers = list(row.get("augmentation_anchor_identifiers", []) or [])
+        if not anchor_calls and not anchor_identifiers:
+            inferred_anchors = build_anchor_signature(prompt_seed_code or seed_code, seed_code)
+            anchor_calls = inferred_anchors["calls"]
+            anchor_identifiers = inferred_anchors["identifiers"]
+        anchor_metrics = compute_anchor_hit_metrics(
+            cleaned_code,
+            anchor_calls=anchor_calls,
+            anchor_identifiers=anchor_identifiers,
+        )
+        expected_call_hits = min(min_anchor_call_hits, len(anchor_calls))
+        expected_identifier_hits = min(min_anchor_identifier_hits, len(anchor_identifiers))
+        if require_anchor_signal and not bool(anchor_metrics["has_anchor_signal"]):
+            low_anchor_signal += 1
+            continue
+        if expected_call_hits and int(anchor_metrics["call_hits"]) < expected_call_hits:
+            low_anchor_hits += 1
+            continue
+        if expected_identifier_hits and int(anchor_metrics["identifier_hits"]) < expected_identifier_hits:
+            low_anchor_hits += 1
+            continue
         if code_fingerprint in seen_fingerprints:
             duplicate_generated += 1
             continue
@@ -278,6 +311,13 @@ def filter_valid_samples(
         )
         new_row["quality_alignment_score"] = primary_alignment
         new_row["quality_length_similarity"] = length_similarity
+        new_row["quality_anchor_calls"] = anchor_calls
+        new_row["quality_anchor_identifiers"] = anchor_identifiers
+        new_row["quality_anchor_call_hits"] = anchor_metrics["call_hits"]
+        new_row["quality_anchor_identifier_hits"] = anchor_metrics["identifier_hits"]
+        new_row["quality_anchor_call_ratio"] = anchor_metrics["call_ratio"]
+        new_row["quality_anchor_identifier_ratio"] = anchor_metrics["identifier_ratio"]
+        new_row["quality_has_anchor_signal"] = anchor_metrics["has_anchor_signal"]
         prelim_rows.append(new_row)
 
     kept_rows = prelim_rows
@@ -311,6 +351,10 @@ def filter_valid_samples(
                 "alignment_score": float(row.get("quality_prompt_alignment_score", 0.0)),
                 "call_overlap": float(row.get("quality_prompt_call_overlap", 0.0)),
             },
+            {
+                "call_ratio": float(row.get("quality_anchor_call_ratio", 0.0)),
+                "identifier_ratio": float(row.get("quality_anchor_identifier_ratio", 0.0)),
+            },
             float(row.get("quality_length_similarity", 0.0)),
         )
 
@@ -335,6 +379,8 @@ def filter_valid_samples(
         "same_as_seed": same_as_seed,
         "low_seed_alignment": low_seed_alignment,
         "low_prompt_alignment": low_prompt_alignment,
+        "low_anchor_signal": low_anchor_signal,
+        "low_anchor_hits": low_anchor_hits,
         "low_detector_confidence": low_detector_confidence,
         "low_quality_score": rerank_stats["low_quality_score"],
         "over_seed_budget": rerank_stats["over_seed_budget"],

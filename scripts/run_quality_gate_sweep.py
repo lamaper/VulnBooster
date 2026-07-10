@@ -58,6 +58,9 @@ def main() -> None:
     parser.add_argument("--prompt-alignments", default="0.0,0.05,0.1,0.15")
     parser.add_argument("--quality-scores", default="0.0,0.3,0.35,0.4")
     parser.add_argument("--max-per-seed-options", default="1,2")
+    parser.add_argument("--min-anchor-identifier-hits", type=int)
+    parser.add_argument("--min-anchor-call-hits", type=int)
+    parser.add_argument("--require-anchor-signal", action="store_true")
     parser.add_argument("--min-kept", type=int, default=4)
     parser.add_argument("--detector-epochs", type=int, default=3)
     parser.add_argument("--detector-batch-size", type=int, default=16)
@@ -68,6 +71,17 @@ def main() -> None:
     config = load_experiment_config(args.config)
     config.training.epochs = args.detector_epochs
     config.training.batch_size = args.detector_batch_size
+    min_anchor_identifier_hits = (
+        config.augmentation.min_identifier_anchor_hits
+        if args.min_anchor_identifier_hits is None
+        else args.min_anchor_identifier_hits
+    )
+    min_anchor_call_hits = (
+        config.augmentation.min_call_anchor_hits
+        if args.min_anchor_call_hits is None
+        else args.min_anchor_call_hits
+    )
+    require_anchor_signal = args.require_anchor_signal or config.augmentation.require_anchor_signal
 
     experiment_root = Path(args.experiment_root).resolve()
     output_root = Path(args.output_root).resolve()
@@ -119,6 +133,9 @@ def main() -> None:
                             min_prompt_alignment=prompt_alignment,
                             min_quality_score=quality_score,
                             max_per_seed=max_per_seed,
+                            min_anchor_identifier_hits=min_anchor_identifier_hits,
+                            min_anchor_call_hits=min_anchor_call_hits,
+                            require_anchor_signal=require_anchor_signal,
                         )
                         kept = _count_rows(validated_path)
                         if kept < args.min_kept:
@@ -189,6 +206,9 @@ def main() -> None:
             "prompt_alignments": prompt_alignments,
             "quality_scores": quality_scores,
             "max_per_seed_options": max_per_seed_options,
+            "min_anchor_identifier_hits": min_anchor_identifier_hits,
+            "min_anchor_call_hits": min_anchor_call_hits,
+            "require_anchor_signal": require_anchor_signal,
             "min_kept": args.min_kept,
         },
         "best_result": best_result,
