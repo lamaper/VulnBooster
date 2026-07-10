@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+from itertools import cycle, islice
 import re
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,154 @@ from .code_utils import (
 from .config import ExperimentConfig
 from .jsonl import iter_jsonl, write_jsonl
 from .knowledge import CWEKnowledgeBase
-from .llm import DeepSeekChatClient, TICK3
+
+
+TICK3 = "```"
+
+
+MECHANISM_PROFILES: dict[str, dict[str, str | list[str]]] = {
+    "memory_bounds": {
+        "label": "Memory/Bounds Misuse",
+        "summary": "The vulnerability is driven by an unsafe size, index, offset, or buffer-length relation around the same memory-access sink.",
+        "strategies": [
+            "derive the copied/read/written length through an extra temporary variable or offset while keeping the same unsafe sink",
+            "add a guard that looks protective but checks the wrong bound, wrong variable, or wrong execution path",
+            "change how the destination buffer, index, or allocation size is computed so the sink remains vulnerable through a size mismatch",
+        ],
+        "constraints": [
+            "keep the same vulnerable buffer or index manipulation family",
+            "preserve the same sink family such as copy/read/write/index access instead of switching to unrelated APIs",
+        ],
+    },
+    "null_deref": {
+        "label": "Null Pointer Dereference",
+        "summary": "The vulnerability is driven by dereferencing a pointer or object reference on a path where its validity is not guaranteed.",
+        "strategies": [
+            "introduce an alias or temporary pointer so the null check applies to one reference but dereference happens through another",
+            "move the dereference into a fallback or error-handling branch where the pointer may still be null",
+            "add branch-specific state so one path appears checked while another path still dereferences without sufficient validation",
+        ],
+        "constraints": [
+            "preserve the same pointer/object family and field access pattern",
+            "do not convert the example into a generic buffer-overflow or unrelated resource bug",
+        ],
+    },
+    "integer_size": {
+        "label": "Integer/Size Arithmetic Error",
+        "summary": "The vulnerability is driven by overflow, truncation, signedness, or arithmetic misuse that corrupts a later size, offset, or allocation decision.",
+        "strategies": [
+            "route the vulnerable size through an intermediate cast, accumulator, or derived length variable before the same sink",
+            "add a guard that uses the wrong numeric type, wrong comparison, or post-overflow value",
+            "change the arithmetic expression around multiplication, addition, shift, or subtraction while keeping the same unsafe size usage",
+        ],
+        "constraints": [
+            "preserve the arithmetic-to-sink dependency rather than replacing it with a pure pointer bug",
+            "keep the same allocation, indexing, or copy context if the seed uses one",
+        ],
+    },
+    "resource_lifecycle": {
+        "label": "Resource Lifecycle Misuse",
+        "summary": "The vulnerability is driven by incorrect release, reuse, ownership, refcount, or cleanup sequencing.",
+        "strategies": [
+            "add an extra cleanup or error path that leaves one alias, handle, or object state inconsistent before reuse",
+            "change the order of release, reset, or reuse while preserving the same object/resource family",
+            "introduce a branch-specific state update so one path performs an unsafe reuse or duplicate release",
+        ],
+        "constraints": [
+            "keep the same resource/object family and lifecycle operations",
+            "preserve the same kind of stale-state or release-order bug instead of turning it into a generic bounds example",
+        ],
+    },
+    "input_validation": {
+        "label": "Input/State Validation Error",
+        "summary": "The vulnerability is driven by incomplete validation of externally influenced data, flags, or control state before a sensitive operation.",
+        "strategies": [
+            "split validation across multiple conditions so one branch still forwards unsafe state into the same sensitive operation",
+            "introduce a cached or derived state variable that is checked inconsistently before use",
+            "change the ordering between normalization, validation, and the sensitive sink while preserving the same unsafe outcome",
+        ],
+        "constraints": [
+            "keep the same validation target, state object, and sensitive operation family",
+            "do not drift into unrelated toy examples that only share the CWE label",
+        ],
+    },
+    "generic_contextual": {
+        "label": "Contextual Vulnerability Pattern",
+        "summary": "The vulnerability must stay close to the seed's concrete control-flow and dataflow pattern because the CWE label alone is too broad.",
+        "strategies": [
+            "add auxiliary local state that perturbs the same vulnerable dataflow into the sink",
+            "mutate a guard or branch condition while preserving the same vulnerable operation family",
+            "change one intermediate transformation step but keep the same context objects, APIs, and sink order",
+        ],
+        "constraints": [
+            "stay tightly bound to the seed's concrete software context",
+            "reuse the same dominant APIs, data objects, and control-flow skeleton",
+        ],
+    },
+}
+
+MECHANISM_CWE_OVERRIDES: dict[str, set[str]] = {
+    "memory_bounds": {"119", "120", "121", "122", "124", "125", "126", "127", "129", "130", "131", "787", "788", "805"},
+    "null_deref": {"476", "690"},
+    "integer_size": {"190", "191", "192", "194", "195", "196", "197", "680", "681"},
+    "resource_lifecycle": {"415", "416", "672", "763"},
+    "input_validation": {"20", "285", "287", "639", "703", "754"},
+}
+
+
+def _normalize_mechanism_text(*parts: str) -> str:
+    return " ".join(part.strip().lower() for part in parts if part and part.strip())
+
+
+def infer_mechanism_family(cwe_name: str, code: str, kb_info: dict[str, str] | None = None) -> str:
+    kb_info = kb_info or {}
+    text = _normalize_mechanism_text(cwe_name, kb_info.get("def", ""), kb_info.get("manifest", ""), code)
+    cwe_match = re.search(r"\b(\d{2,4})\b", cwe_name)
+    cwe_id = cwe_match.group(1) if cwe_match else ""
+    null_related = any(token in text for token in ("null pointer", "null dereference", "null-deref", "nullptr", "null ", "cwe-476"))
+    pointer_access = any(token in text for token in ("dereference", "pointer", "->", "*"))
+
+    for family, cwe_ids in MECHANISM_CWE_OVERRIDES.items():
+        if cwe_id in cwe_ids:
+            return family
+
+    if any(token in text for token in ("use-after-free", "double free", "dangling", "release", "cleanup", "refcount", "close(", "unlock", "free(")):
+        return "resource_lifecycle"
+    if null_related and pointer_access:
+        return "null_deref"
+    if any(token in text for token in ("buffer overflow", "out-of-bounds", "out of bounds", "overrun", "buffer", "strcpy", "memcpy", "memmove", "strcat", "index")):
+        return "memory_bounds"
+    if any(token in text for token in ("integer overflow", "signedness", "truncation", "wraparound", "overflow", "underflow", "size_t", "ssize_t")):
+        return "integer_size"
+    if any(token in text for token in ("validation", "permission", "authorization", "authentication", "tainted", "untrusted", "state check", "sanit")):
+        return "input_validation"
+    return "generic_contextual"
+
+
+def build_mechanism_guidance(
+    cwe_name: str,
+    code: str,
+    *,
+    kb_info: dict[str, str] | None = None,
+    generate_k: int = 3,
+) -> tuple[str, str]:
+    family = infer_mechanism_family(cwe_name, code, kb_info)
+    profile = MECHANISM_PROFILES[family]
+    strategies = list(profile["strategies"])
+    constraints = list(profile["constraints"])
+    assigned = list(islice(cycle(strategies), max(0, generate_k)))
+    plan_lines = [f"- Candidate {index}: prioritize this mutation style: {strategy}." for index, strategy in enumerate(assigned, start=1)]
+    constraint_lines = [f"- {item}." for item in constraints]
+    block = (
+        "[Mechanism Profile]\n"
+        f"- Family: {profile['label']}.\n"
+        f"- Mechanism summary: {profile['summary']}\n\n"
+        "[Mechanism-Specific Mutation Plan]\n"
+        f"{chr(10).join(plan_lines)}\n\n"
+        "[Mechanism-Specific Constraints]\n"
+        f"{chr(10).join(constraint_lines)}"
+    )
+    return family, block
 
 
 def _expected_anchor_requirements(config: ExperimentConfig, anchor_signature: dict[str, list[str]]) -> tuple[int, int]:
@@ -101,6 +249,8 @@ def _passes_novelty_gate(config: ExperimentConfig, seed_code: str, candidate_cod
 
 class CoTAugmenter:
     def __init__(self, config: ExperimentConfig):
+        from .llm import DeepSeekChatClient
+
         self.config = config
         self.client = DeepSeekChatClient(config)
 
@@ -230,6 +380,8 @@ class CWEAugmenter:
     )
 
     def __init__(self, config: ExperimentConfig):
+        from .llm import DeepSeekChatClient
+
         self.config = config
         self.client = DeepSeekChatClient(config)
         self.kb = CWEKnowledgeBase(config.cwe.cache_file)
@@ -246,6 +398,12 @@ class CWEAugmenter:
         cwe_raw = row.get("cwe", ["Unknown"])
         cwe_name = cwe_raw[0] if isinstance(cwe_raw, list) and cwe_raw else str(cwe_raw)
         kb_info = self.kb.get(cwe_name)
+        mechanism_family, mechanism_guidance = build_mechanism_guidance(
+            cwe_name,
+            seed_code or code,
+            kb_info=kb_info,
+            generate_k=self.config.augmentation.generate_k,
+        )
         seed_block = f"[Seed Full Function]\n{seed_code}\n\n" if seed_code and sanitize_generated_function(seed_code) != sanitize_generated_function(code) else ""
         slice_label = "Critical Seed Slice" if source_field != "func" else "Seed Code"
         anchor_summary = (
@@ -259,11 +417,13 @@ class CWEAugmenter:
                 f"[{slice_label}]\n{code}\n\n"
                 f"[Vulnerability Definition]\n{kb_info['def']}\n\n"
                 f"[Vulnerability Manifestation]\n{kb_info['manifest']}\n\n"
+                f"{mechanism_guidance}\n\n"
                 f"{anchor_summary}"
                 f"{anchor_constraints}\n\n"
                 f"[Your Task]\nGenerate {self.config.augmentation.generate_k} new vulnerable C functions that stay semantically near the seed.\n\n"
                 "[Additional Rules]\n"
                 "- Preserve the same vulnerability trigger and the same kind of vulnerable operation.\n"
+                f"- Treat this sample as a {mechanism_family} case and follow the mechanism-specific plan above.\n"
                 "- Keep the same major API family, object family, and control-flow style as the seed.\n"
                 "- Do not output unrelated examples that only share the same CWE label.\n"
                 "- Each candidate must differ in several executable lines and use a non-trivial mutation such as auxiliary state, branch or guard mutation, or changed dataflow into the same vulnerable sink.\n"
@@ -275,10 +435,12 @@ class CWEAugmenter:
             f"{seed_block}"
             f"[{slice_label}]\n{code}\n\n"
             f"[CWE Type]\n{cwe_name}\n\n"
+            f"{mechanism_guidance}\n\n"
             f"{anchor_summary}"
             f"{anchor_constraints}\n\n"
             f"[Your Task]\nGenerate {self.config.augmentation.generate_k} new vulnerable C functions that stay semantically near the seed.\n\n"
             "[Additional Rules]\n"
+            f"- Treat this sample as a {mechanism_family} case and follow the mechanism-specific plan above.\n"
             "- Each candidate must differ in several executable lines and use a non-trivial mutation such as auxiliary state, branch or guard mutation, or changed dataflow into the same vulnerable sink.\n"
             "- Across the set, diversify the mutation styles instead of repeating the same tiny tweak.\n\n"
             f"[Output Format]\nWrap EACH generated function in {TICK3}c blocks."
@@ -314,6 +476,15 @@ class CWEAugmenter:
             if code:
                 seed_code = str(row.get("func", "") or "")
                 anchor_signature, anchor_constraints = _build_anchor_constraints(self.config, code, seed_code)
+                cwe_raw = row.get("cwe", ["Unknown"])
+                cwe_name = cwe_raw[0] if isinstance(cwe_raw, list) and cwe_raw else str(cwe_raw)
+                kb_info = self.kb.get(cwe_name)
+                mechanism_family, _ = build_mechanism_guidance(
+                    cwe_name,
+                    seed_code or code,
+                    kb_info=kb_info,
+                    generate_k=self.config.augmentation.generate_k,
+                )
                 prompt_rows.append(
                     (
                         row,
@@ -321,6 +492,7 @@ class CWEAugmenter:
                         code,
                         seed_code,
                         anchor_signature,
+                        mechanism_family,
                         self._build_prompt(row, source_field, code, seed_code, anchor_signature, anchor_constraints),
                     )
                 )
@@ -331,23 +503,26 @@ class CWEAugmenter:
             source_code: str,
             seed_code: str,
             anchor_signature: dict[str, list[str]],
+            mechanism_family: str,
             prompt: str,
             semaphore: asyncio.Semaphore,
-        ) -> tuple[dict[str, Any], str, str, str, dict[str, list[str]], list[str]]:
-            return row, source_field, source_code, seed_code, anchor_signature, await self._generate(prompt, semaphore)
+        ) -> tuple[dict[str, Any], str, str, str, dict[str, list[str]], str, list[str]]:
+            return row, source_field, source_code, seed_code, anchor_signature, mechanism_family, await self._generate(prompt, semaphore)
 
         async def _run_all() -> tuple[list[list[dict[str, Any]]], int, int, int]:
             semaphore = asyncio.Semaphore(self.config.llm.concurrency_limit)
             tasks = [
-                asyncio.create_task(_generate_for_row(row, source_field, source_code, seed_code, anchor_signature, prompt, semaphore))
-                for row, source_field, source_code, seed_code, anchor_signature, prompt in prompt_rows
+                asyncio.create_task(
+                    _generate_for_row(row, source_field, source_code, seed_code, anchor_signature, mechanism_family, prompt, semaphore)
+                )
+                for row, source_field, source_code, seed_code, anchor_signature, mechanism_family, prompt in prompt_rows
             ]
             results: list[list[dict[str, Any]]] = []
             anchor_rejected = 0
             copy_rejected = 0
             trivial_rejected = 0
             for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="CWE Augment", unit="sample"):
-                row, source_field, source_code, seed_code, anchor_signature, generated = await task
+                row, source_field, source_code, seed_code, anchor_signature, mechanism_family, generated = await task
                 generated_rows: list[dict[str, Any]] = []
                 seed_fingerprint = fingerprint_code(seed_code)
                 for i, gen_code in enumerate(generated):
@@ -373,6 +548,7 @@ class CWEAugmenter:
                     new_row["augmentation_seed_code"] = source_code
                     new_row["augmentation_anchor_calls"] = anchor_signature["calls"]
                     new_row["augmentation_anchor_identifiers"] = anchor_signature["identifiers"]
+                    new_row["augmentation_mechanism_family"] = mechanism_family
                     new_row["augmentation_anchor_call_hits"] = anchor_metrics["call_hits"]
                     new_row["augmentation_anchor_identifier_hits"] = anchor_metrics["identifier_hits"]
                     new_row["augmentation_novel_line_count"] = novelty_metrics["novel_line_count"]

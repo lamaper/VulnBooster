@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 import os
 
+from vulnbooster.augmentation import build_mechanism_guidance, infer_mechanism_family
 from vulnbooster.cleaning import clean_c_code
 from vulnbooster.code_utils import (
     build_anchor_signature,
@@ -347,6 +348,33 @@ class LineSlicerTests(unittest.TestCase):
         )
         balanced = close_unbalanced_blocks(raw)
         self.assertEqual(balanced, "int demo(int x) {\nif (x > 0) {\nreturn x;\n}\n}")
+
+    def test_infer_mechanism_family_detects_memory_bounds(self) -> None:
+        family = infer_mechanism_family(
+            "CWE-119: Buffer Overflow",
+            "int demo(char *src) {\nchar buf[8];\nstrcpy(buf, src);\nreturn buf[0];\n}",
+        )
+        self.assertEqual(family, "memory_bounds")
+
+    def test_infer_mechanism_family_detects_resource_lifecycle(self) -> None:
+        family = infer_mechanism_family(
+            "CWE-416: Use After Free",
+            "void demo(Node *n) {\nfree(n);\nreturn n->value;\n}",
+        )
+        self.assertEqual(family, "resource_lifecycle")
+
+    def test_build_mechanism_guidance_assigns_candidate_specific_plan(self) -> None:
+        family, guidance = build_mechanism_guidance(
+            "CWE-476: NULL Pointer Dereference",
+            "int demo(struct Obj *obj) {\nif (obj)\nreturn obj->field;\nreturn 0;\n}",
+            kb_info={"def": "The product dereferences a pointer that might be null."},
+            generate_k=3,
+        )
+        self.assertEqual(family, "null_deref")
+        self.assertIn("[Mechanism Profile]", guidance)
+        self.assertIn("Candidate 1", guidance)
+        self.assertIn("Candidate 3", guidance)
+        self.assertIn("Null Pointer Dereference", guidance)
 
 
 class ValidationTests(unittest.TestCase):
