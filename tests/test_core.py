@@ -6,16 +6,24 @@ from pathlib import Path
 import os
 
 from vulnbooster.cleaning import clean_c_code
-from vulnbooster.code_utils import ensure_block_balance, stitch_function_header
+from vulnbooster.code_utils import (
+    compute_code_length_similarity,
+    compute_seed_alignment_metrics,
+    ensure_block_balance,
+    stitch_function_header,
+)
 from vulnbooster.config import load_experiment_config
-from vulnbooster.env import load_local_env
+from vulnbooster.env import apply_java_home, configure_hf_endpoint, load_local_env
 from vulnbooster.line_slicer import (
     align_teacher_slice_to_function,
     build_line_slice_alignment_dataset,
     reconstruct_line_slice,
+    resolve_model_artifact_dir,
 )
 from vulnbooster.merge import merge_jsonl
 from vulnbooster.sampling import build_balanced_smoke_set
+from vulnbooster.code_utils import project_slice_onto_original, sanitize_generated_function
+from vulnbooster.validation import filter_valid_samples
 
 
 class ConfigTests(unittest.TestCase):
@@ -90,6 +98,31 @@ class EnvTests(unittest.TestCase):
             self.assertEqual(loaded, env_path)
             self.assertEqual(os.environ["DEMO_KEY"], "demo-value")
 
+    def test_configure_hf_endpoint_sets_both_env_vars(self) -> None:
+        os.environ.pop("HF_ENDPOINT", None)
+        os.environ.pop("HUGGINGFACE_HUB_ENDPOINT", None)
+        endpoint = configure_hf_endpoint("https://hf-mirror.example")
+        self.assertEqual(endpoint, "https://hf-mirror.example")
+        self.assertEqual(os.environ["HF_ENDPOINT"], "https://hf-mirror.example")
+        self.assertEqual(os.environ["HUGGINGFACE_HUB_ENDPOINT"], "https://hf-mirror.example")
+
+    def test_apply_java_home_updates_java_home_and_path(self) -> None:
+        original_path = os.environ.get("PATH", "")
+        original_java_home = os.environ.get("JAVA_HOME")
+        try:
+            java_home = "/tmp/demo-jdk"
+            os.environ["PATH"] = "/usr/bin"
+            applied = apply_java_home(java_home)
+            self.assertEqual(applied, java_home)
+            self.assertEqual(os.environ["JAVA_HOME"], java_home)
+            self.assertTrue(os.environ["PATH"].startswith(f"{java_home}/bin"))
+        finally:
+            os.environ["PATH"] = original_path
+            if original_java_home is None:
+                os.environ.pop("JAVA_HOME", None)
+            else:
+                os.environ["JAVA_HOME"] = original_java_home
+
 
 class LineSlicerTests(unittest.TestCase):
     def test_align_teacher_slice_to_function_marks_expected_lines(self) -> None:
@@ -138,6 +171,232 @@ class LineSlicerTests(unittest.TestCase):
             payload = output_path.read_text(encoding="utf-8")
             self.assertIn("\"teacher_source\": \"refined_code\"", payload)
             self.assertIn("\"line_labels\": [0, 0, 1, 1, 1, 0, 0]", payload)
+
+    def test_resolve_model_artifact_dir_prefers_best_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            checkpoint = base / "checkpoint-10"
+            checkpoint.mkdir()
+            (checkpoint / "config.json").write_text("{}", encoding="utf-8")
+            trainer_state = {
+                "best_model_checkpoint": str(checkpoint),
+            }
+            (checkpoint / "trainer_state.json").write_text(__import__("json").dumps(trainer_state), encoding="utf-8")
+            resolved = resolve_model_artifact_dir(base)
+            self.assertEqual(resolved, checkpoint)
+
+    def test_sanitize_generated_function_removes_duplicate_leading_header_blocks(self) -> None:
+        raw = (
+            "int demo(int x)\n"
+            "{\n"
+            "int demo(int x)\n"
+            "{\n"
+            "return x;\n"
+            "}\n"
+            "}\n"
+        )
+        cleaned = sanitize_generated_function(raw)
+        self.assertEqual(cleaned, "int demo(int x)\n{\nreturn x;\n}")
+
+    def test_project_slice_onto_original_reuses_original_lines(self) -> None:
+        original = (
+            "int demo(int x)\n"
+            "{\n"
+            "int y = x + 1;\n"
+            "if (y > 0) {\n"
+            "return y;\n"
+            "}\n"
+            "return 0;\n"
+            "}\n"
+        )
+        extracted = (
+            "int demo(int x)\n"
+            "{\n"
+            "int demo(int x)\n"
+            "{\n"
+            "if (y > 0) {\n"
+            "return y;\n"
+            "}\n"
+            "}\n"
+        )
+        projected = project_slice_onto_original(extracted, original)
+        self.assertEqual(projected, "int demo(int x)\n{\nif (y > 0) {\nreturn y;\n}\nreturn 0;\n}")
+
+    def test_compute_seed_alignment_metrics_prefers_shared_calls(self) -> None:
+        seed = (
+            "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
+            "{\n"
+            "ptr->location = (char*)gf_malloc((u32) ptr->size);\n"
+            "gf_bs_read_data(bs, ptr->location, (u32)ptr->size);\n"
+            "}\n"
+        )
+        close_variant = (
+            "GF_Err sample_box_read(GF_Box *s, GF_BitStream *bs)\n"
+            "{\n"
+            "ptr->sample = (char*)gf_malloc(ptr->size);\n"
+            "gf_bs_read_data(bs, ptr->sample, ptr->size + 1);\n"
+            "}\n"
+        )
+        far_variant = "int process_data(const int *data, int len) {\nint buffer[4];\nreturn buffer[0];\n}"
+
+        close_metrics = compute_seed_alignment_metrics(seed, close_variant)
+        far_metrics = compute_seed_alignment_metrics(seed, far_variant)
+
+        self.assertGreater(close_metrics["alignment_score"], far_metrics["alignment_score"])
+        self.assertGreater(close_metrics["call_overlap"], 0.0)
+
+    def test_compute_code_length_similarity_prefers_similar_size(self) -> None:
+        reference = "int demo() {\nint a = 0;\nint b = a + 1;\nreturn b;\n}"
+        close = "int sample() {\nint x = 0;\nreturn x + 1;\n}"
+        far = "int tiny() {\nreturn 0;\n}"
+
+        self.assertGreater(compute_code_length_similarity(reference, close), compute_code_length_similarity(reference, far))
+
+
+class ValidationTests(unittest.TestCase):
+    def test_filter_valid_samples_deduplicates_and_skips_seed_copies(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            seed = "int demo(int x) {\nreturn x;\n}"
+            generated = [
+                {
+                    "idx": "a",
+                    "func": "int demo(int x) {\nreturn x + 1;\n}",
+                    "seed_func": seed,
+                },
+                {
+                    "idx": "b",
+                    "func": "int demo(int x) {\nreturn x + 1;\n}",
+                    "seed_func": seed,
+                },
+                {
+                    "idx": "c",
+                    "func": "int demo(int x) {\nreturn x;\n}",
+                    "seed_func": seed,
+                },
+            ]
+            input_path.write_text("\n".join(__import__("json").dumps(row) for row in generated) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(input_path, output_path)
+            kept = output_path.read_text(encoding="utf-8").strip().splitlines()
+
+            self.assertEqual(stats["kept"], 1)
+            self.assertEqual(stats["duplicate_generated"], 1)
+            self.assertEqual(stats["same_as_seed"], 1)
+            self.assertEqual(len(kept), 1)
+
+    def test_filter_valid_samples_respects_seed_alignment_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            seed = (
+                "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
+                "{\n"
+                "ptr->location = (char*)gf_malloc((u32) ptr->size);\n"
+                "gf_bs_read_data(bs, ptr->location, (u32)ptr->size);\n"
+                "return GF_OK;\n"
+                "}\n"
+            )
+            generated = [
+                {
+                    "idx": "close",
+                    "func": (
+                        "GF_Err sample_box_read(GF_Box *s, GF_BitStream *bs)\n"
+                        "{\n"
+                        "ptr->sample = (char*)gf_malloc(ptr->size);\n"
+                        "gf_bs_read_data(bs, ptr->sample, ptr->size + 1);\n"
+                        "return GF_OK;\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed,
+                },
+                {
+                    "idx": "far",
+                    "func": "int process_data(const int *data, int len) {\nint buffer[4];\nreturn buffer[0];\n}",
+                    "seed_func": seed,
+                },
+            ]
+            input_path.write_text("\n".join(__import__("json").dumps(row) for row in generated) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(input_path, output_path, min_seed_alignment=0.2)
+            kept = output_path.read_text(encoding="utf-8").strip().splitlines()
+
+            self.assertEqual(stats["kept"], 1)
+            self.assertEqual(stats["low_seed_alignment"], 1)
+            self.assertEqual(len(kept), 1)
+
+    def test_filter_valid_samples_reranks_per_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            seed_func = (
+                "int changedline(char *src) {\n"
+                "char buf[8];\n"
+                "strcpy(buf, src);\n"
+                "return buf[0];\n"
+                "}\n"
+            )
+            line_slice = (
+                "int changedline(char *src) {\n"
+                "strcpy(buf, src);\n"
+                "}\n"
+            )
+            generated = [
+                {
+                    "idx": "best",
+                    "original_idx": "seed-1",
+                    "func": (
+                        "int changedline_copy(char *src) {\n"
+                        "char buf[8];\n"
+                        "strcpy(buf, src);\n"
+                        "return buf[0];\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed_func,
+                    "augmentation_seed_code": line_slice,
+                },
+                {
+                    "idx": "runner_up",
+                    "original_idx": "seed-1",
+                    "func": (
+                        "int changedline_alt(char *src) {\n"
+                        "char buf[8];\n"
+                        "strcpy(buf, src);\n"
+                        "buf[7] = '\\0';\n"
+                        "return buf[0];\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed_func,
+                    "augmentation_seed_code": line_slice,
+                },
+                {
+                    "idx": "far",
+                    "original_idx": "seed-1",
+                    "func": "int process_data(const int *data, int len) {\nint buffer[4];\nreturn buffer[0];\n}",
+                    "seed_func": seed_func,
+                    "augmentation_seed_code": line_slice,
+                },
+            ]
+            input_path.write_text("\n".join(__import__("json").dumps(row) for row in generated) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(
+                input_path,
+                output_path,
+                min_prompt_alignment=0.1,
+                min_quality_score=0.3,
+                max_per_seed=1,
+            )
+            kept_rows = [__import__("json").loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+            self.assertEqual(stats["kept"], 1)
+            self.assertEqual(stats["low_prompt_alignment"], 1)
+            self.assertEqual(stats["over_seed_budget"], 1)
+            self.assertEqual(kept_rows[0]["idx"], "best")
+            self.assertEqual(kept_rows[0]["quality_rank_within_seed"], 1)
 
 
 if __name__ == "__main__":
