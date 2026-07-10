@@ -33,6 +33,18 @@ max_length = 512
 threshold = 0.5
 context_radius = 12
 
+[codet5_slicer]
+model_name = "Salesforce/codet5-small"
+batch_size = 2
+learning_rate = 3e-5
+epochs = 2
+max_input_length = 512
+max_target_length = 64
+generation_max_length = 64
+num_beams = 2
+line_number_width = 3
+use_static_slice_fallback = true
+
 [loss]
 focal_alpha = 0.85
 focal_gamma = 2.0

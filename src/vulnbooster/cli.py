@@ -81,6 +81,19 @@ def build_parser() -> argparse.ArgumentParser:
     predict_line_slicer.add_argument("--model-dir", required=True)
     predict_line_slicer.add_argument("--output", required=True)
 
+    train_codet5_slicer = subparsers.add_parser("train-codet5-slicer", help="Train the CodeT5 line-tag slicer.")
+    _config_argument(train_codet5_slicer)
+    train_codet5_slicer.add_argument("--train", required=True)
+    train_codet5_slicer.add_argument("--valid", required=True)
+    train_codet5_slicer.add_argument("--test", required=True)
+    train_codet5_slicer.add_argument("--output-dir", required=True)
+
+    predict_codet5_slicer = subparsers.add_parser("predict-codet5-slicer", help="Predict slices with the trained CodeT5 slicer.")
+    _config_argument(predict_codet5_slicer)
+    predict_codet5_slicer.add_argument("--input", required=True)
+    predict_codet5_slicer.add_argument("--model-dir", required=True)
+    predict_codet5_slicer.add_argument("--output", required=True)
+
     merge = subparsers.add_parser("merge", help="Merge JSONL datasets with de-duplication.")
     _config_argument(merge)
     merge.add_argument("--output", required=True)
@@ -212,6 +225,32 @@ def main() -> None:
 
         print(
             predict_line_slices(
+                config=config,
+                input_path=Path(args.input),
+                model_dir=Path(args.model_dir),
+                output_path=Path(args.output),
+            )
+        )
+        return
+
+    if args.command == "train-codet5-slicer":
+        from .codet5_slicer import train_codet5_slicer
+
+        result = train_codet5_slicer(
+            config=config,
+            train_path=Path(args.train),
+            valid_path=Path(args.valid),
+            test_path=Path(args.test),
+            output_dir=Path(args.output_dir),
+        )
+        print(result)
+        return
+
+    if args.command == "predict-codet5-slicer":
+        from .codet5_slicer import predict_codet5_slices
+
+        print(
+            predict_codet5_slices(
                 config=config,
                 input_path=Path(args.input),
                 model_dir=Path(args.model_dir),

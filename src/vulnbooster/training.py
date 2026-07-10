@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +14,7 @@ from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, DataCollatorWithPadding, Trainer, TrainingArguments
 
 from .config import ExperimentConfig
+from .env import configure_hf_endpoint
 from .jsonl import iter_jsonl
 
 
@@ -114,6 +114,46 @@ def compute_metrics(threshold: float):
     return _inner
 
 
+def load_cached_tokenizer(model_name_or_path: str):
+    def _load(local_files_only: bool, use_fast: bool | None = None):
+        kwargs = {"local_files_only": local_files_only}
+        if use_fast is not None:
+            kwargs["use_fast"] = use_fast
+        return AutoTokenizer.from_pretrained(model_name_or_path, **kwargs)
+
+    try:
+        return _load(local_files_only=True)
+    except OSError:
+        pass
+    except (TypeError, ValueError, Exception) as exc:
+        message = str(exc).lower()
+        if "addedtoken" not in message and "backend tokenizer" not in message and "modelwrapper" not in message:
+            raise
+        try:
+            return _load(local_files_only=True, use_fast=False)
+        except OSError:
+            return _load(local_files_only=False, use_fast=False)
+
+    try:
+        return _load(local_files_only=False)
+    except (TypeError, ValueError, Exception) as exc:
+        message = str(exc).lower()
+        if "addedtoken" not in message and "backend tokenizer" not in message and "modelwrapper" not in message:
+            raise
+        return _load(local_files_only=False, use_fast=False)
+
+
+def load_cached_sequence_classifier(model_name_or_path: str, num_labels: int):
+    try:
+        return AutoModelForSequenceClassification.from_pretrained(
+            model_name_or_path,
+            num_labels=num_labels,
+            local_files_only=True,
+        )
+    except OSError:
+        return AutoModelForSequenceClassification.from_pretrained(model_name_or_path, num_labels=num_labels)
+
+
 def train_classifier(
     config: ExperimentConfig,
     train_path: Path,
@@ -124,10 +164,10 @@ def train_classifier(
     prediction_path: Path,
     target_key: str = "refined_code",
 ) -> TrainingResult:
-    os.environ["HF_ENDPOINT"] = config.runtime.hf_endpoint
+    configure_hf_endpoint(config.runtime.hf_endpoint)
 
-    tokenizer = AutoTokenizer.from_pretrained(config.training.model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(config.training.model_name, num_labels=2)
+    tokenizer = load_cached_tokenizer(config.training.model_name)
+    model = load_cached_sequence_classifier(config.training.model_name, num_labels=2)
 
     train_dataset = CodeDataset(train_path, tokenizer, config.training.max_length, target_key)
     valid_dataset = CodeDataset(valid_path, tokenizer, config.training.max_length, target_key)
@@ -149,6 +189,9 @@ def train_classifier(
         metric_for_best_model="f1",
         logging_steps=50,
         seed=config.training.seed,
+        dataloader_pin_memory=torch.cuda.is_available(),
+        report_to=[],
+        save_total_limit=2,
     )
 
     trainer = DynamicLossTrainer(
@@ -157,11 +200,14 @@ def train_classifier(
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
         compute_metrics=compute_metrics(config.training.prediction_threshold),
     )
     trainer.train()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    trainer.save_model(str(output_dir))
+    tokenizer.save_pretrained(output_dir)
 
     test_metrics = trainer.evaluate(test_dataset)
 

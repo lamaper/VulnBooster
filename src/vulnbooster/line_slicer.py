@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .code_utils import ensure_block_balance, normalize_code_line, stitch_function_header
 from .config import ExperimentConfig
+from .env import configure_hf_endpoint
 from .jsonl import iter_jsonl, write_jsonl
 
 
@@ -236,6 +237,78 @@ class LineSlicerTrainingResult:
     output_dir: Path
 
 
+def load_sequence_classification_tokenizer(model_name_or_path: str | Path):
+    from transformers import AutoTokenizer
+
+    def _load(local_files_only: bool, use_fast: bool | None = None):
+        kwargs = {"local_files_only": local_files_only}
+        if use_fast is not None:
+            kwargs["use_fast"] = use_fast
+        return AutoTokenizer.from_pretrained(model_name_or_path, **kwargs)
+
+    try:
+        return _load(local_files_only=True)
+    except OSError:
+        pass
+    except (TypeError, ValueError) as exc:
+        message = str(exc).lower()
+        if "addedtoken" not in message and "backend tokenizer" not in message:
+            raise
+        try:
+            return _load(local_files_only=True, use_fast=False)
+        except OSError:
+            return _load(local_files_only=False, use_fast=False)
+
+    try:
+        return _load(local_files_only=False)
+    except (TypeError, ValueError) as exc:
+        message = str(exc).lower()
+        if "addedtoken" not in message and "backend tokenizer" not in message:
+            raise
+        return _load(local_files_only=False, use_fast=False)
+
+
+def load_sequence_classification_model(model_name_or_path: str | Path, num_labels: int | None = None):
+    from transformers import AutoModelForSequenceClassification
+
+    kwargs = {}
+    if num_labels is not None:
+        kwargs["num_labels"] = num_labels
+
+    try:
+        return AutoModelForSequenceClassification.from_pretrained(model_name_or_path, local_files_only=True, **kwargs)
+    except OSError:
+        return AutoModelForSequenceClassification.from_pretrained(model_name_or_path, **kwargs)
+
+
+def resolve_model_artifact_dir(model_dir: Path) -> Path:
+    if (model_dir / "config.json").exists():
+        return model_dir
+
+    best_candidate: Path | None = None
+    for state_file in sorted(model_dir.glob("checkpoint-*/trainer_state.json")):
+        try:
+            payload = json.loads(state_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        best_path = payload.get("best_model_checkpoint")
+        if not best_path:
+            continue
+        candidate = Path(best_path)
+        if not candidate.is_absolute():
+            candidate = (state_file.parent.parent / candidate).resolve()
+        if (candidate / "config.json").exists():
+            return candidate
+
+    for checkpoint_dir in sorted(model_dir.glob("checkpoint-*")):
+        if checkpoint_dir.is_dir() and (checkpoint_dir / "config.json").exists():
+            best_candidate = checkpoint_dir
+
+    if best_candidate is not None:
+        return best_candidate
+    return model_dir
+
+
 def train_line_slicer(
     config: ExperimentConfig,
     train_path: Path,
@@ -243,15 +316,14 @@ def train_line_slicer(
     test_path: Path,
     output_dir: Path,
 ) -> LineSlicerTrainingResult:
-    import numpy as np
     import torch
     from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer, DataCollatorWithPadding, Trainer, TrainingArguments
+    from transformers import DataCollatorWithPadding, Trainer, TrainingArguments
 
-    os.environ["HF_ENDPOINT"] = config.runtime.hf_endpoint
+    configure_hf_endpoint(config.runtime.hf_endpoint)
 
-    tokenizer = AutoTokenizer.from_pretrained(config.line_slicer.model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(config.line_slicer.model_name, num_labels=2)
+    tokenizer = load_sequence_classification_tokenizer(config.line_slicer.model_name)
+    model = load_sequence_classification_model(config.line_slicer.model_name, num_labels=2)
 
     train_dataset = LineSlicerDataset(
         file_path=train_path,
@@ -300,6 +372,9 @@ def train_line_slicer(
         metric_for_best_model="f1",
         logging_steps=50,
         seed=config.training.seed,
+        dataloader_pin_memory=torch.cuda.is_available(),
+        report_to=[],
+        save_total_limit=2,
     )
 
     trainer = Trainer(
@@ -307,11 +382,14 @@ def train_line_slicer(
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
         compute_metrics=compute_metrics,
     )
     trainer.train()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    trainer.save_model(str(output_dir))
+    tokenizer.save_pretrained(output_dir)
     eval_metrics = trainer.evaluate(valid_dataset)
     test_metrics = trainer.evaluate(test_dataset)
     return LineSlicerTrainingResult(eval_metrics=eval_metrics, test_metrics=test_metrics, output_dir=output_dir)
@@ -324,11 +402,15 @@ def predict_line_slices(
     output_path: Path,
 ) -> dict[str, int]:
     import torch
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(model_dir)
+    configure_hf_endpoint(config.runtime.hf_endpoint)
+
+    resolved_model_dir = resolve_model_artifact_dir(model_dir)
+    tokenizer = load_sequence_classification_tokenizer(resolved_model_dir)
+    model = load_sequence_classification_model(resolved_model_dir)
     model.eval()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
     output_rows: list[dict] = []
     stats = Counter()
@@ -355,6 +437,7 @@ def predict_line_slices(
                 max_length=config.line_slicer.max_length,
                 return_tensors="pt",
             )
+            encoding = {key: value.to(device) for key, value in encoding.items()}
             with torch.no_grad():
                 logits = model(**encoding).logits
                 probs = torch.softmax(logits, dim=-1)

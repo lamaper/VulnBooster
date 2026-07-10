@@ -51,6 +51,20 @@ class LineSlicerConfig:
 
 
 @dataclass(slots=True)
+class CodeT5SlicerConfig:
+    model_name: str
+    batch_size: int
+    learning_rate: float
+    epochs: int
+    max_input_length: int
+    max_target_length: int
+    generation_max_length: int
+    num_beams: int
+    line_number_width: int
+    use_static_slice_fallback: bool
+
+
+@dataclass(slots=True)
 class LossConfig:
     focal_alpha: float
     focal_gamma: float
@@ -109,6 +123,7 @@ class ExperimentConfig:
     runtime: RuntimeConfig
     training: TrainingConfig
     line_slicer: LineSlicerConfig
+    codet5_slicer: CodeT5SlicerConfig
     loss: LossConfig
     static_slice: StaticSliceConfig
     llm: LLMConfig
@@ -139,6 +154,8 @@ def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
 
     project_root = _resolve(config_file.parent, raw["project"]["root_dir"])
 
+    raw_codet5 = raw.get("codet5_slicer", {})
+
     return ExperimentConfig(
         project=ProjectConfig(
             name=raw["project"]["name"],
@@ -156,6 +173,18 @@ def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
         runtime=RuntimeConfig(hf_endpoint=raw["runtime"]["hf_endpoint"]),
         training=TrainingConfig(**raw["training"]),
         line_slicer=LineSlicerConfig(**raw["line_slicer"]),
+        codet5_slicer=CodeT5SlicerConfig(
+            model_name=raw_codet5.get("model_name", "Salesforce/codet5-small"),
+            batch_size=int(raw_codet5.get("batch_size", max(1, int(raw["line_slicer"]["batch_size"])))),
+            learning_rate=float(raw_codet5.get("learning_rate", raw["line_slicer"]["learning_rate"])),
+            epochs=int(raw_codet5.get("epochs", raw["line_slicer"]["epochs"])),
+            max_input_length=int(raw_codet5.get("max_input_length", raw["line_slicer"]["max_length"])),
+            max_target_length=int(raw_codet5.get("max_target_length", 64)),
+            generation_max_length=int(raw_codet5.get("generation_max_length", 64)),
+            num_beams=int(raw_codet5.get("num_beams", 4)),
+            line_number_width=int(raw_codet5.get("line_number_width", 3)),
+            use_static_slice_fallback=bool(raw_codet5.get("use_static_slice_fallback", True)),
+        ),
         loss=LossConfig(**raw["loss"]),
         static_slice=StaticSliceConfig(
             joern_parse_cmd=raw["static_slice"]["joern_parse_cmd"],

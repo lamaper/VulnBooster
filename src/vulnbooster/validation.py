@@ -79,7 +79,7 @@ def score_rows_with_detector(
 
     configure_hf_endpoint(config.runtime.hf_endpoint)
 
-    tokenizer = load_cached_tokenizer(str(model_dir))
+    tokenizer = load_cached_tokenizer(config.training.model_name)
     model = load_cached_sequence_classifier(str(model_dir), num_labels=2)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)

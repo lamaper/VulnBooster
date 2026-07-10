@@ -46,14 +46,17 @@ def _metric_subset(metrics: dict[str, float]) -> dict[str, float]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a reusable line-slicer-guided augmentation experiment.")
+    parser = argparse.ArgumentParser(description="Run a reusable slicer-guided augmentation experiment.")
     parser.add_argument("--config", default="configs/full.toml")
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--train-per-class", type=int, default=100)
     parser.add_argument("--valid-per-class", type=int, default=40)
     parser.add_argument("--test-per-class", type=int, default=40)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--slicer-backend", choices=["line", "codet5"], default="line")
     parser.add_argument("--line-slicer-epochs", type=int, default=3)
+    parser.add_argument("--codet5-slicer-epochs", type=int)
+    parser.add_argument("--codet5-slicer-batch-size", type=int)
     parser.add_argument("--detector-epochs", type=int, default=3)
     parser.add_argument("--line-slicer-batch-size", type=int, default=4)
     parser.add_argument("--detector-batch-size", type=int, default=16)
@@ -76,6 +79,7 @@ def main() -> None:
     args = parser.parse_args()
 
     from vulnbooster.augmentation import CoTAugmenter, CWEAugmenter
+    from vulnbooster.codet5_slicer import predict_codet5_slices, train_codet5_slicer
     from vulnbooster.config import load_experiment_config
     from vulnbooster.env import load_local_env
     from vulnbooster.line_slicer import build_line_slice_alignment_dataset, predict_line_slices, train_line_slicer
@@ -90,6 +94,10 @@ def main() -> None:
     config.training.epochs = args.detector_epochs
     config.line_slicer.batch_size = args.line_slicer_batch_size
     config.training.batch_size = args.detector_batch_size
+    if args.codet5_slicer_epochs is not None:
+        config.codet5_slicer.epochs = args.codet5_slicer_epochs
+    if args.codet5_slicer_batch_size is not None:
+        config.codet5_slicer.batch_size = args.codet5_slicer_batch_size
     config.llm.concurrency_limit = args.llm_concurrency
     config.augmentation.generate_k = args.generate_k
     min_anchor_identifier_hits = (
@@ -128,7 +136,7 @@ def main() -> None:
     output_root = Path(args.output_root).resolve()
     data_root = output_root / "data"
     teacher_root = output_root / "teacher"
-    line_root = output_root / "line_slicer"
+    slicer_root = output_root / ("codet5_slicer" if args.slicer_backend == "codet5" else "line_slicer")
     baseline_root = output_root / "baseline_detector"
     aug_root = output_root / "augmentation"
     augmented_root = output_root / "augmented_detector"
@@ -137,11 +145,13 @@ def main() -> None:
         "config": {
             "config_path": str(Path(args.config).resolve()),
             "output_root": str(output_root),
+            "slicer_backend": args.slicer_backend,
             "train_per_class": args.train_per_class,
             "valid_per_class": args.valid_per_class,
             "test_per_class": args.test_per_class,
             "seed": args.seed,
             "line_slicer_epochs": args.line_slicer_epochs,
+            "codet5_slicer_epochs": config.codet5_slicer.epochs,
             "detector_epochs": args.detector_epochs,
             "llm_concurrency": args.llm_concurrency,
             "augmentation": args.augmentation,
@@ -201,23 +211,33 @@ def main() -> None:
     label_stats: dict[str, Any] = {}
     for split in ("train", "valid", "test"):
         refined_path = teacher_root / split / f"{split}_refined.jsonl"
-        label_path = line_root / f"{split}_line_labels.jsonl"
+        label_path = slicer_root / f"{split}_line_labels.jsonl"
         label_stats[split] = build_line_slice_alignment_dataset(refined_path, label_path)
     stats["line_labels"] = label_stats
 
-    print("[5/10] Training line slicer")
-    line_model_dir = line_root / "model"
-    line_train_result = train_line_slicer(
-        config=config,
-        train_path=line_root / "train_line_labels.jsonl",
-        valid_path=line_root / "valid_line_labels.jsonl",
-        test_path=line_root / "test_line_labels.jsonl",
-        output_dir=line_model_dir,
-    )
-    stats["line_slicer_train"] = {
-        "eval_metrics": dict(line_train_result.eval_metrics),
-        "test_metrics": dict(line_train_result.test_metrics),
-        "output_dir": str(line_train_result.output_dir),
+    print(f"[5/10] Training {args.slicer_backend} slicer")
+    slicer_model_dir = slicer_root / "model"
+    if args.slicer_backend == "codet5":
+        slicer_train_result = train_codet5_slicer(
+            config=config,
+            train_path=slicer_root / "train_line_labels.jsonl",
+            valid_path=slicer_root / "valid_line_labels.jsonl",
+            test_path=slicer_root / "test_line_labels.jsonl",
+            output_dir=slicer_model_dir,
+        )
+    else:
+        slicer_train_result = train_line_slicer(
+            config=config,
+            train_path=slicer_root / "train_line_labels.jsonl",
+            valid_path=slicer_root / "valid_line_labels.jsonl",
+            test_path=slicer_root / "test_line_labels.jsonl",
+            output_dir=slicer_model_dir,
+        )
+    stats["slicer_train"] = {
+        "backend": args.slicer_backend,
+        "eval_metrics": dict(slicer_train_result.eval_metrics),
+        "test_metrics": dict(slicer_train_result.test_metrics),
+        "output_dir": str(slicer_train_result.output_dir),
     }
 
     print("[6/10] Training baseline detector")
@@ -236,14 +256,22 @@ def main() -> None:
         "false_negative_count": baseline_result.false_negative_count,
     }
 
-    print("[7/10] Predicting FN line slices")
-    fn_line_slice_path = line_root / "valid_false_negatives_line_slice.jsonl"
-    fn_slice_stats = predict_line_slices(
-        config=config,
-        input_path=baseline_root / "valid_false_negatives.jsonl",
-        model_dir=line_model_dir,
-        output_path=fn_line_slice_path,
-    )
+    print(f"[7/10] Predicting FN slices with {args.slicer_backend}")
+    fn_line_slice_path = slicer_root / "valid_false_negatives_line_slice.jsonl"
+    if args.slicer_backend == "codet5":
+        fn_slice_stats = predict_codet5_slices(
+            config=config,
+            input_path=baseline_root / "valid_false_negatives.jsonl",
+            model_dir=slicer_model_dir,
+            output_path=fn_line_slice_path,
+        )
+    else:
+        fn_slice_stats = predict_line_slices(
+            config=config,
+            input_path=baseline_root / "valid_false_negatives.jsonl",
+            model_dir=slicer_model_dir,
+            output_path=fn_line_slice_path,
+        )
     stats["fn_line_slices"] = fn_slice_stats
 
     print("[8/10] Generating augmented vulnerable samples")

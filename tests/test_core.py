@@ -28,6 +28,12 @@ from vulnbooster.line_slicer import (
 from vulnbooster.merge import merge_jsonl
 from vulnbooster.sampling import build_balanced_smoke_set
 from vulnbooster.code_utils import project_slice_onto_original, sanitize_generated_function
+from vulnbooster.codet5_slicer import (
+    build_codet5_input,
+    parse_line_tags,
+    reconstruct_slice_from_line_numbers,
+    render_line_tags,
+)
 from vulnbooster.validation import filter_valid_samples
 
 try:
@@ -234,6 +240,26 @@ class LineSlicerTests(unittest.TestCase):
         )
         projected = project_slice_onto_original(extracted, original)
         self.assertEqual(projected, "int demo(int x)\n{\nif (y > 0) {\nreturn y;\n}\nreturn 0;\n}")
+
+    def test_codet5_line_tags_round_trip(self) -> None:
+        rendered = render_line_tags([3, 5, 5, 7], width=3)
+        self.assertEqual(rendered, "L003 L005 L007")
+        parsed = parse_line_tags(rendered, max_line_number=10)
+        self.assertEqual(parsed, [3, 5, 7])
+
+    def test_codet5_input_contains_static_hints_and_numbered_lines(self) -> None:
+        func = "int f() {\nint a = source();\nreturn a;\n}"
+        prompt = build_codet5_input(func, [2, 3], width=3)
+        self.assertIn("StaticSliceHints: L002 L003", prompt)
+        self.assertIn("L001 int f() {", prompt)
+        self.assertIn("L003 return a;", prompt)
+
+    def test_reconstruct_slice_from_line_numbers_balances_blocks(self) -> None:
+        func = "int f() {\nint a = source();\nif (a > 0) {\nreturn a;\n}\nreturn 0;\n}"
+        reconstructed, line_numbers = reconstruct_slice_from_line_numbers(func, [3, 4])
+        self.assertEqual(line_numbers, [3, 4, 5])
+        self.assertTrue(reconstructed.startswith("int f() {"))
+        self.assertIn("return a;", reconstructed)
 
     def test_compute_seed_alignment_metrics_prefers_shared_calls(self) -> None:
         seed = (
