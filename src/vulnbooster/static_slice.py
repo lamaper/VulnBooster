@@ -8,12 +8,24 @@ from pathlib import Path
 from tqdm import tqdm
 
 from .config import ExperimentConfig
+from .env import apply_java_home
 from .jsonl import iter_jsonl
 
 
 class JoernSlicer:
     def __init__(self, config: ExperimentConfig):
         self.config = config
+        self.java_home = apply_java_home()
+
+    def _subprocess_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        if self.java_home:
+            env["JAVA_HOME"] = self.java_home
+            java_bin = str(Path(self.java_home) / "bin")
+            current_path = env.get("PATH", "")
+            if java_bin not in current_path.split(os.pathsep):
+                env["PATH"] = java_bin if not current_path else f"{java_bin}{os.pathsep}{current_path}"
+        return env
 
     def prepare_sources(self, input_path: Path, source_dir: Path) -> int:
         source_dir.mkdir(parents=True, exist_ok=True)
@@ -41,10 +53,12 @@ class JoernSlicer:
                 encoding="utf-8",
                 errors="ignore",
                 timeout=self.config.static_slice.parse_timeout_seconds,
+                env=self._subprocess_env(),
             )
             if result.returncode == 0:
                 return {"status": "success"}
-            return {"status": "error", "error": result.stderr}
+            error = (result.stderr or result.stdout or "").strip()
+            return {"status": "error", "error": error}
         except subprocess.TimeoutExpired:
             return {"status": "timeout", "error": "parse timeout"}
 
@@ -69,7 +83,7 @@ class JoernSlicer:
         sample_id: str,
         target: int | None,
     ) -> bool:
-        env = os.environ.copy()
+        env = self._subprocess_env()
         env["JOERN_SOURCE_ROOT"] = str(source_dir.resolve()).replace("\\", "/")
         env["TARGET_CPG_PATH"] = str(cpg_path.resolve()).replace("\\", "/")
 

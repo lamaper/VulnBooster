@@ -60,8 +60,13 @@ class CodeT5SlicerConfig:
     max_target_length: int
     generation_max_length: int
     num_beams: int
+    candidate_count: int
     line_number_width: int
     use_static_slice_fallback: bool
+    static_hint_window: int
+    overpredict_function_ratio: float
+    overpredict_static_ratio: float
+    overpredict_static_margin: int
 
 
 @dataclass(slots=True)
@@ -182,8 +187,13 @@ def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
             max_target_length=int(raw_codet5.get("max_target_length", 64)),
             generation_max_length=int(raw_codet5.get("generation_max_length", 64)),
             num_beams=int(raw_codet5.get("num_beams", 4)),
+            candidate_count=int(raw_codet5.get("candidate_count", raw_codet5.get("num_beams", 4))),
             line_number_width=int(raw_codet5.get("line_number_width", 3)),
             use_static_slice_fallback=bool(raw_codet5.get("use_static_slice_fallback", True)),
+            static_hint_window=int(raw_codet5.get("static_hint_window", 1)),
+            overpredict_function_ratio=float(raw_codet5.get("overpredict_function_ratio", 0.6)),
+            overpredict_static_ratio=float(raw_codet5.get("overpredict_static_ratio", 2.5)),
+            overpredict_static_margin=int(raw_codet5.get("overpredict_static_margin", 3)),
         ),
         loss=LossConfig(**raw["loss"]),
         static_slice=StaticSliceConfig(

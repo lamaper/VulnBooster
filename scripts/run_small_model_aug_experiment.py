@@ -57,6 +57,11 @@ def main() -> None:
     parser.add_argument("--line-slicer-epochs", type=int, default=3)
     parser.add_argument("--codet5-slicer-epochs", type=int)
     parser.add_argument("--codet5-slicer-batch-size", type=int)
+    parser.add_argument("--codet5-candidate-count", type=int)
+    parser.add_argument("--codet5-static-hint-window", type=int)
+    parser.add_argument("--codet5-overpredict-function-ratio", type=float)
+    parser.add_argument("--codet5-overpredict-static-ratio", type=float)
+    parser.add_argument("--codet5-overpredict-static-margin", type=int)
     parser.add_argument("--detector-epochs", type=int, default=3)
     parser.add_argument("--line-slicer-batch-size", type=int, default=4)
     parser.add_argument("--detector-batch-size", type=int, default=16)
@@ -76,6 +81,9 @@ def main() -> None:
     parser.add_argument("--augmentation-min-structural-novel-line-count", type=int)
     parser.add_argument("--augmentation-max-abstract-token-similarity", type=float)
     parser.add_argument("--augmentation-reject-trivial-variants", action="store_true")
+    parser.add_argument("--prompt-slice-min-static-precision", type=float, default=0.0)
+    parser.add_argument("--prompt-slice-min-static-recall", type=float, default=0.0)
+    parser.add_argument("--prompt-slice-max-ratio", type=float, default=1.0)
     args = parser.parse_args()
 
     from vulnbooster.augmentation import CoTAugmenter, CWEAugmenter
@@ -98,6 +106,16 @@ def main() -> None:
         config.codet5_slicer.epochs = args.codet5_slicer_epochs
     if args.codet5_slicer_batch_size is not None:
         config.codet5_slicer.batch_size = args.codet5_slicer_batch_size
+    if args.codet5_candidate_count is not None:
+        config.codet5_slicer.candidate_count = args.codet5_candidate_count
+    if args.codet5_static_hint_window is not None:
+        config.codet5_slicer.static_hint_window = args.codet5_static_hint_window
+    if args.codet5_overpredict_function_ratio is not None:
+        config.codet5_slicer.overpredict_function_ratio = args.codet5_overpredict_function_ratio
+    if args.codet5_overpredict_static_ratio is not None:
+        config.codet5_slicer.overpredict_static_ratio = args.codet5_overpredict_static_ratio
+    if args.codet5_overpredict_static_margin is not None:
+        config.codet5_slicer.overpredict_static_margin = args.codet5_overpredict_static_margin
     config.llm.concurrency_limit = args.llm_concurrency
     config.augmentation.generate_k = args.generate_k
     min_anchor_identifier_hits = (
@@ -152,6 +170,11 @@ def main() -> None:
             "seed": args.seed,
             "line_slicer_epochs": args.line_slicer_epochs,
             "codet5_slicer_epochs": config.codet5_slicer.epochs,
+            "codet5_candidate_count": config.codet5_slicer.candidate_count,
+            "codet5_static_hint_window": config.codet5_slicer.static_hint_window,
+            "codet5_overpredict_function_ratio": config.codet5_slicer.overpredict_function_ratio,
+            "codet5_overpredict_static_ratio": config.codet5_slicer.overpredict_static_ratio,
+            "codet5_overpredict_static_margin": config.codet5_slicer.overpredict_static_margin,
             "detector_epochs": args.detector_epochs,
             "llm_concurrency": args.llm_concurrency,
             "augmentation": args.augmentation,
@@ -169,6 +192,9 @@ def main() -> None:
             "augmentation_min_structural_novel_line_count": min_structural_novel_line_count,
             "augmentation_max_abstract_token_similarity": max_abstract_token_similarity,
             "augmentation_reject_trivial_variants": reject_trivial_variants,
+            "prompt_slice_min_static_precision": args.prompt_slice_min_static_precision,
+            "prompt_slice_min_static_recall": args.prompt_slice_min_static_recall,
+            "prompt_slice_max_ratio": args.prompt_slice_max_ratio,
         }
     }
 
@@ -264,6 +290,11 @@ def main() -> None:
             input_path=baseline_root / "valid_false_negatives.jsonl",
             model_dir=slicer_model_dir,
             output_path=fn_line_slice_path,
+            metadata_paths=[
+                slicer_root / "valid_line_labels.jsonl",
+                teacher_root / "valid" / "valid_refined.jsonl",
+                teacher_root / "valid" / "valid_static.jsonl",
+            ],
         )
     else:
         fn_slice_stats = predict_line_slices(
@@ -300,6 +331,9 @@ def main() -> None:
         min_structural_novel_line_count=min_structural_novel_line_count,
         max_abstract_token_similarity=max_abstract_token_similarity,
         reject_trivial_variants=reject_trivial_variants,
+        min_prompt_slice_static_precision=args.prompt_slice_min_static_precision,
+        min_prompt_slice_static_recall=args.prompt_slice_min_static_recall,
+        max_prompt_slice_ratio=args.prompt_slice_max_ratio,
     )
     merged_train_path = aug_root / "train_augmented.jsonl"
     merge_stats = merge_jsonl(

@@ -42,8 +42,13 @@ max_input_length = 512
 max_target_length = 64
 generation_max_length = 64
 num_beams = 4
+candidate_count = 4
 line_number_width = 3
 use_static_slice_fallback = true
+static_hint_window = 1
+overpredict_function_ratio = 0.60
+overpredict_static_ratio = 2.50
+overpredict_static_margin = 3
 
 [loss]
 focal_alpha = 0.85

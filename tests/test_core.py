@@ -30,11 +30,17 @@ from vulnbooster.sampling import build_balanced_smoke_set
 from vulnbooster.code_utils import project_slice_onto_original, sanitize_generated_function
 from vulnbooster.codet5_slicer import (
     build_codet5_input,
+    build_sample_lookup_keys,
+    enrich_row_with_slice_metadata,
+    load_slice_metadata_lookup,
     parse_line_tags,
+    prune_codet5_predicted_lines,
     reconstruct_slice_from_line_numbers,
     render_line_tags,
+    score_codet5_candidate,
+    select_best_codet5_candidate,
 )
-from vulnbooster.validation import filter_valid_samples
+from vulnbooster.validation import compute_prompt_slice_quality_metrics, filter_valid_samples
 
 try:
     import numpy as np
@@ -51,6 +57,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.project.dataset_variant, "smoke")
         self.assertTrue(cfg.root_dir.exists())
         self.assertEqual(cfg.dataset_split_path("train", cleaned=False).name, "primevul_train.jsonl")
+        self.assertEqual(cfg.codet5_slicer.static_hint_window, 1)
 
 
 class CleaningTests(unittest.TestCase):
@@ -261,6 +268,68 @@ class LineSlicerTests(unittest.TestCase):
         self.assertTrue(reconstructed.startswith("int f() {"))
         self.assertIn("return a;", reconstructed)
 
+    def test_build_sample_lookup_keys_includes_original_and_numeric_forms(self) -> None:
+        keys = build_sample_lookup_keys({"idx": "0012", "original_idx": "aug-12", "fromIdx": 12})
+        self.assertEqual(keys, ["0012", "12", "aug-12"])
+
+    def test_load_slice_metadata_lookup_and_enrich_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            metadata_path = base / "metadata.jsonl"
+            metadata_path.write_text(
+                __import__("json").dumps(
+                    {
+                        "idx": 210098,
+                        "static_line_numbers": [4, 5],
+                        "static_slice": "if (flag) {\nreturn -1;\n}",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            lookup = load_slice_metadata_lookup(metadata_path)
+            enriched, hit = enrich_row_with_slice_metadata(
+                {"idx": "210098", "func": "int f() {\nif (flag) {\nreturn -1;\n}\nreturn 0;\n}"},
+                lookup,
+            )
+            self.assertTrue(hit)
+            self.assertEqual(enriched["static_line_numbers"], [4, 5])
+            self.assertIn("static_slice", enriched)
+
+    def test_prune_codet5_predicted_lines_trims_full_function_prediction(self) -> None:
+        pruned, stats = prune_codet5_predicted_lines(
+            [1, 2, 3, 4, 5, 6, 7],
+            [3, 4],
+            function_length=7,
+            static_hint_window=1,
+            overpredict_function_ratio=0.6,
+            overpredict_static_ratio=2.5,
+            overpredict_static_margin=3,
+        )
+        self.assertEqual(pruned, [2, 3, 4, 5])
+        self.assertEqual(stats["overpredict_pruned"], 1)
+        self.assertEqual(stats["full_function_prediction"], 1)
+
+    def test_score_codet5_candidate_prefers_compact_static_aligned_slice(self) -> None:
+        focused = score_codet5_candidate([3, 4, 5], [3, 4], function_length=10)
+        wide = score_codet5_candidate([1, 2, 3, 4, 5, 6, 7], [3, 4], function_length=10)
+        self.assertGreater(focused["score"], wide["score"])
+        self.assertGreater(focused["static_precision"], wide["static_precision"])
+
+    def test_select_best_codet5_candidate_prefers_static_aligned_candidate(self) -> None:
+        selected, metrics, debug = select_best_codet5_candidate(
+            ["L001 L002 L003 L004 L005 L006", "L003 L004 L005", "L003 L004"],
+            [3, 4],
+            function_length=8,
+            static_hint_window=1,
+            overpredict_function_ratio=0.6,
+            overpredict_static_ratio=2.5,
+            overpredict_static_margin=3,
+        )
+        self.assertEqual(selected, [3, 4])
+        self.assertGreater(metrics["static_precision"], 0.9)
+        self.assertGreaterEqual(len(debug), 2)
+
     def test_compute_seed_alignment_metrics_prefers_shared_calls(self) -> None:
         seed = (
             "GF_Err url_box_read(GF_Box *s, GF_BitStream *bs)\n"
@@ -404,6 +473,17 @@ class LineSlicerTests(unittest.TestCase):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_compute_prompt_slice_quality_metrics_uses_static_overlap(self) -> None:
+        row = {
+            "seed_func": "int f() {\nint a = 0;\nif (a) {\nreturn -1;\n}\nreturn 0;\n}",
+            "line_slice_line_numbers": [3, 4, 5],
+            "static_line_numbers": [3, 4],
+        }
+        metrics = compute_prompt_slice_quality_metrics(row)
+        self.assertAlmostEqual(metrics["static_precision"], 2 / 3, places=6)
+        self.assertAlmostEqual(metrics["static_recall"], 1.0, places=6)
+        self.assertGreater(metrics["slice_ratio"], 0.0)
+
     def test_filter_valid_samples_deduplicates_and_skips_seed_copies(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -477,6 +557,30 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(stats["kept"], 1)
             self.assertEqual(stats["low_seed_alignment"], 1)
             self.assertEqual(len(kept), 1)
+
+    def test_filter_valid_samples_can_reject_low_quality_prompt_slice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            row = {
+                "idx": "demo_aug",
+                "func": "int f() {\nint a = 0;\nif (a) {\nreturn -1;\n}\nreturn a;\n}",
+                "seed_func": "int f() {\nint a = 0;\nif (a) {\nreturn -1;\n}\nreturn 0;\n}",
+                "line_slice_line_numbers": [1, 2, 3, 4, 5, 6],
+                "static_line_numbers": [3, 4],
+            }
+            input_path.write_text(__import__("json").dumps(row) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(
+                input_path,
+                output_path,
+                max_prompt_slice_ratio=0.6,
+                min_prompt_slice_static_precision=0.5,
+            )
+
+            self.assertEqual(stats["kept"], 0)
+            self.assertEqual(stats["low_prompt_slice_quality"], 1)
 
     def test_filter_valid_samples_reranks_per_seed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

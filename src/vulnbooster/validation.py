@@ -115,6 +115,45 @@ def _pick_prompt_seed_code(row: dict) -> str:
     return ""
 
 
+def _normalize_line_numbers(values) -> list[int]:
+    numbers: list[int] = []
+    seen: set[int] = set()
+    if not isinstance(values, list):
+        return numbers
+    for item in values:
+        try:
+            line_number = int(item)
+        except (TypeError, ValueError):
+            continue
+        if line_number <= 0 or line_number in seen:
+            continue
+        seen.add(line_number)
+        numbers.append(line_number)
+    return numbers
+
+
+def compute_prompt_slice_quality_metrics(row: dict) -> dict[str, float]:
+    prompt_lines = _normalize_line_numbers(row.get("line_slice_line_numbers"))
+    static_lines = _normalize_line_numbers(row.get("static_line_numbers"))
+    function_code = str(row.get("seed_func", "") or row.get("func", "") or "")
+    function_length = max(1, len(function_code.splitlines()))
+    if not prompt_lines:
+        return {
+            "slice_ratio": 0.0,
+            "static_precision": 0.0,
+            "static_recall": 0.0,
+        }
+
+    overlap = len(set(prompt_lines) & set(static_lines))
+    static_precision = overlap / len(prompt_lines) if prompt_lines else 0.0
+    static_recall = overlap / len(static_lines) if static_lines else 0.0
+    return {
+        "slice_ratio": len(prompt_lines) / function_length,
+        "static_precision": static_precision,
+        "static_recall": static_recall,
+    }
+
+
 def _seed_group_key(row: dict) -> str:
     for field in ("original_idx", "fromIdx", "idx"):
         value = row.get(field)
@@ -213,6 +252,9 @@ def filter_valid_samples(
     min_structural_novel_line_count: int = 0,
     max_abstract_token_similarity: float = 1.0,
     reject_trivial_variants: bool = False,
+    min_prompt_slice_static_precision: float = 0.0,
+    min_prompt_slice_static_recall: float = 0.0,
+    max_prompt_slice_ratio: float = 1.0,
 ) -> dict[str, int]:
     rows = list(iter_jsonl(input_path))
     prelim_rows: list[dict] = []
@@ -227,6 +269,7 @@ def filter_valid_samples(
     low_anchor_hits = 0
     low_novelty = 0
     trivial_variant = 0
+    low_prompt_slice_quality = 0
     for row in tqdm(rows, desc="AST Validation", unit="sample"):
         sanitized_code = close_unbalanced_blocks(str(row.get("func", "") or ""))
         if not sanitized_code:
@@ -298,6 +341,17 @@ def filter_valid_samples(
             if not enough_structural_novelty and not varied_enough:
                 trivial_variant += 1
                 continue
+        prompt_slice_metrics = compute_prompt_slice_quality_metrics(row)
+        if prompt_slice_metrics["slice_ratio"] > max_prompt_slice_ratio:
+            low_prompt_slice_quality += 1
+            continue
+        if static_lines := _normalize_line_numbers(row.get("static_line_numbers")):
+            if prompt_slice_metrics["static_precision"] < min_prompt_slice_static_precision:
+                low_prompt_slice_quality += 1
+                continue
+            if prompt_slice_metrics["static_recall"] < min_prompt_slice_static_recall:
+                low_prompt_slice_quality += 1
+                continue
         if code_fingerprint in seen_fingerprints:
             duplicate_generated += 1
             continue
@@ -336,6 +390,9 @@ def filter_valid_samples(
         new_row["quality_structural_novel_line_count"] = novelty_metrics["structural_novel_line_count"]
         new_row["quality_structural_novel_line_ratio"] = novelty_metrics["structural_novel_line_ratio"]
         new_row["quality_abstract_token_similarity"] = novelty_metrics["abstract_token_similarity"]
+        new_row["quality_prompt_slice_ratio"] = prompt_slice_metrics["slice_ratio"]
+        new_row["quality_prompt_slice_static_precision"] = prompt_slice_metrics["static_precision"]
+        new_row["quality_prompt_slice_static_recall"] = prompt_slice_metrics["static_recall"]
         prelim_rows.append(new_row)
 
     kept_rows = prelim_rows
@@ -406,6 +463,7 @@ def filter_valid_samples(
         "low_anchor_hits": low_anchor_hits,
         "low_novelty": low_novelty,
         "trivial_variant": trivial_variant,
+        "low_prompt_slice_quality": low_prompt_slice_quality,
         "low_detector_confidence": low_detector_confidence,
         "low_quality_score": rerank_stats["low_quality_score"],
         "over_seed_budget": rerank_stats["over_seed_budget"],

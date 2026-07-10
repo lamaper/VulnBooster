@@ -9,7 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
 
-from .code_utils import stitch_function_header
+from .code_utils import project_slice_onto_original, sanitize_generated_function
 from .config import ExperimentConfig
 from .jsonl import iter_jsonl, write_jsonl
 
@@ -121,7 +121,7 @@ class LLMPreFilter:
                     timeout=40.0,
                 )
                 pure_slice, ok = extract_code_block(response)
-                cleaned["llm_slice"] = stitch_function_header(pure_slice, func_code) if ok else ""
+                cleaned["llm_slice"] = project_slice_onto_original(pure_slice, func_code) if ok else ""
             except Exception:
                 cleaned["llm_slice"] = ""
         return cleaned
@@ -183,10 +183,10 @@ class LLMFusionRefiner:
         llm_slice = row.get("llm_slice", "")
 
         if not static_slice and llm_slice:
-            row["refined_code"] = stitch_function_header(llm_slice, original_code)
+            row["refined_code"] = project_slice_onto_original(llm_slice, original_code)
             return row
         if static_slice and not llm_slice:
-            row["refined_code"] = stitch_function_header(static_slice, original_code)
+            row["refined_code"] = project_slice_onto_original(static_slice, original_code)
             return row
         if not static_slice and not llm_slice:
             row["refined_code"] = original_code
@@ -207,10 +207,11 @@ class LLMFusionRefiner:
                 )
                 refined, ok = extract_code_block(response)
                 fallback = llm_slice or static_slice
-                row["refined_code"] = stitch_function_header(refined if ok else fallback, original_code)
+                candidate = refined if ok else fallback
+                row["refined_code"] = project_slice_onto_original(candidate, original_code)
             except Exception:
                 fallback = llm_slice or static_slice or original_code
-                row["refined_code"] = stitch_function_header(fallback, original_code)
+                row["refined_code"] = project_slice_onto_original(fallback, original_code)
         return row
 
     def run(self, static_path: Path, llm_path: Path, output_path: Path) -> dict[str, int]:
@@ -233,7 +234,7 @@ class LLMFusionRefiner:
             llm_slice = llm_row.get("llm_slice", "")
             if isinstance(llm_slice, list):
                 llm_slice = "\n".join(llm_slice)
-            merged["llm_slice"] = llm_slice
+            merged["llm_slice"] = sanitize_generated_function(llm_slice)
             merged_rows.append(merged)
 
         async def _run_all() -> list[dict[str, Any]]:

@@ -60,6 +60,19 @@ def align_teacher_slice_to_function(function_code: str, teacher_slice: str) -> A
 
 
 def infer_static_line_numbers(row: dict) -> list[int]:
+    static_line_numbers = row.get("static_line_numbers")
+    if isinstance(static_line_numbers, list):
+        numbers: list[int] = []
+        for item in static_line_numbers:
+            try:
+                value = int(item)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                numbers.append(value)
+        if numbers:
+            return sorted(set(numbers))
+
     raw_lines = row.get("raw_lines")
     if isinstance(raw_lines, list):
         numbers: list[int] = []
