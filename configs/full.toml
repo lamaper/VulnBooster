@@ -66,6 +66,11 @@ max_call_anchors = 4
 min_identifier_anchor_hits = 2
 min_call_anchor_hits = 1
 require_anchor_signal = true
+min_novel_line_count = 2
+min_novel_line_ratio = 0.2
+min_structural_novel_line_count = 1
+max_abstract_token_similarity = 0.92
+reject_trivial_variants = true
 
 [cwe]
 cache_file = "code/cwe_knowledge_cache.json"

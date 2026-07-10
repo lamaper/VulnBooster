@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from difflib import SequenceMatcher
 import re
 
 
@@ -11,6 +12,21 @@ CONTROL_HEADER_PATTERN = re.compile(r"^\s*(if|for|while|switch|return|else|do|ca
 DECLARED_FUNCTION_NAME_PATTERN = re.compile(r"^\s*[A-Za-z_~][\w\s\*\:&<>\[\],]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)")
 IDENTIFIER_PATTERN = re.compile(r"\b[A-Za-z_]\w*\b")
 FUNCTION_CALL_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+COMMENT_PATTERN = re.compile(
+    r'(?P<string>"(?:\\.|[^\\"])*")|'
+    r"(?P<char>'(?:\\.|[^\\'])*')|"
+    r'(?P<block_comment>/\*.*?\*/)|'
+    r'(?P<line_comment>//.*?$)',
+    re.DOTALL | re.MULTILINE,
+)
+ABSTRACT_TOKEN_PATTERN = re.compile(
+    r'"(?:\\.|[^\\"])*"|'
+    r"'(?:\\.|[^\\'])*'|"
+    r"\b0x[0-9A-Fa-f]+\b|"
+    r"\b\d+(?:\.\d+)?\b|"
+    r"\b[A-Za-z_]\w*\b|"
+    r"==|!=|<=|>=|->|&&|\|\||<<|>>|[-+*/%<>=!&|^~?:;,.{}()[\]]"
+)
 
 C_LIKE_STOPWORDS = {
     "auto",
@@ -156,12 +172,67 @@ def sanitize_generated_function(code: str) -> str:
     return extract_first_function_block(code)
 
 
+def close_unbalanced_blocks(code: str) -> str:
+    sanitized = sanitize_generated_function(code)
+    if not sanitized:
+        return ""
+    balance = sum(count_brace_delta(line) for line in strip_comments(sanitized).splitlines())
+    if balance <= 0:
+        return sanitized
+    return sanitized + ("\n" if not sanitized.endswith("\n") else "") + "\n".join("}" for _ in range(balance))
+
+
 def fingerprint_code(code: str) -> str:
     sanitized = sanitize_generated_function(code)
     if not sanitized:
         return ""
     normalized_lines = [normalize_code_line(line) for line in sanitized.splitlines() if normalize_code_line(line)]
     return "\n".join(normalized_lines)
+
+
+def strip_comments(code: str) -> str:
+    if not code:
+        return ""
+
+    def replacer(match: re.Match[str]) -> str:
+        if match.group("block_comment") or match.group("line_comment"):
+            return ""
+        return match.group(0)
+
+    return COMMENT_PATTERN.sub(replacer, code)
+
+
+def extract_executable_lines(code: str) -> list[str]:
+    sanitized = sanitize_generated_function(code)
+    if not sanitized:
+        return []
+    uncommented = strip_comments(sanitized)
+    return [normalize_code_line(line) for line in uncommented.splitlines() if normalize_code_line(line)]
+
+
+def _abstract_token(token: str) -> str:
+    if not token:
+        return token
+    if token.startswith('"') or token.startswith("'"):
+        return "STR"
+    if re.fullmatch(r"0x[0-9A-Fa-f]+", token) or re.fullmatch(r"\d+(?:\.\d+)?", token):
+        return "NUM"
+    if IDENTIFIER_PATTERN.fullmatch(token):
+        if token in C_LIKE_STOPWORDS:
+            return token
+        return "ID"
+    return token
+
+
+def abstract_code_structure(code: str) -> str:
+    lines = extract_executable_lines(code)
+    if not lines:
+        return ""
+    abstracted_lines: list[str] = []
+    for line in lines:
+        tokens = ABSTRACT_TOKEN_PATTERN.findall(line)
+        abstracted_lines.append(" ".join(_abstract_token(token) for token in tokens))
+    return "\n".join(abstracted_lines)
 
 
 def extract_code_identifiers(code: str) -> set[str]:
@@ -253,10 +324,7 @@ def compute_seed_alignment_metrics(seed_code: str, candidate_code: str) -> dict[
 
 
 def count_code_lines(code: str) -> int:
-    sanitized = sanitize_generated_function(code)
-    if not sanitized:
-        return 0
-    return sum(1 for line in sanitized.splitlines() if normalize_code_line(line))
+    return len(extract_executable_lines(code))
 
 
 def compute_code_length_similarity(reference_code: str, candidate_code: str) -> float:
@@ -332,6 +400,42 @@ def compute_anchor_hit_metrics(
         "call_ratio": call_ratio,
         "identifier_ratio": identifier_ratio,
         "has_anchor_signal": bool(matched_calls or matched_identifiers),
+    }
+
+
+def compute_variant_novelty_metrics(seed_code: str, candidate_code: str) -> dict[str, float | int]:
+    seed_lines = extract_executable_lines(seed_code)
+    candidate_lines = extract_executable_lines(candidate_code)
+    if not seed_lines or not candidate_lines:
+        return {
+            "seed_line_count": len(seed_lines),
+            "candidate_line_count": len(candidate_lines),
+            "novel_line_count": 0,
+            "novel_line_ratio": 0.0,
+            "structural_novel_line_count": 0,
+            "structural_novel_line_ratio": 0.0,
+            "abstract_token_similarity": 0.0,
+        }
+
+    seed_line_set = set(seed_lines)
+    novel_lines = [line for line in candidate_lines if line not in seed_line_set]
+
+    abstract_seed = abstract_code_structure(seed_code)
+    abstract_candidate = abstract_code_structure(candidate_code)
+    seed_structural_lines = set(abstract_seed.splitlines())
+    candidate_structural_lines = abstract_candidate.splitlines()
+    structural_novel_lines = [line for line in candidate_structural_lines if line and line not in seed_structural_lines]
+
+    similarity = SequenceMatcher(None, abstract_seed, abstract_candidate).ratio() if abstract_seed and abstract_candidate else 0.0
+
+    return {
+        "seed_line_count": len(seed_lines),
+        "candidate_line_count": len(candidate_lines),
+        "novel_line_count": len(novel_lines),
+        "novel_line_ratio": len(novel_lines) / max(1, len(candidate_lines)),
+        "structural_novel_line_count": len(structural_novel_lines),
+        "structural_novel_line_ratio": len(structural_novel_lines) / max(1, len(candidate_lines)),
+        "abstract_token_similarity": similarity,
     }
 
 

@@ -8,9 +8,11 @@ import os
 from vulnbooster.cleaning import clean_c_code
 from vulnbooster.code_utils import (
     build_anchor_signature,
+    close_unbalanced_blocks,
     compute_anchor_hit_metrics,
     compute_code_length_similarity,
     compute_seed_alignment_metrics,
+    compute_variant_novelty_metrics,
     ensure_block_balance,
     stitch_function_header,
 )
@@ -302,6 +304,50 @@ class LineSlicerTests(unittest.TestCase):
         self.assertEqual(metrics["identifier_hits"], 2)
         self.assertTrue(metrics["has_anchor_signal"])
 
+    def test_compute_variant_novelty_metrics_penalizes_rename_only_variants(self) -> None:
+        seed = (
+            "int changedline(char *src) {\n"
+            "char buf[8];\n"
+            "strcpy(buf, src);\n"
+            "return buf[0];\n"
+            "}\n"
+        )
+        rename_only = (
+            "int changedline_copy(char *input) {\n"
+            "char tmp[8];\n"
+            "strcpy(tmp, input);\n"
+            "return tmp[0];\n"
+            "}\n"
+        )
+        structural = (
+            "int changedline_copy(char *src) {\n"
+            "char buf[8];\n"
+            "size_t n = strlen(src);\n"
+            "if (n > 0) {\n"
+            "strcpy(buf, src);\n"
+            "}\n"
+            "return buf[0];\n"
+            "}\n"
+        )
+
+        rename_metrics = compute_variant_novelty_metrics(seed, rename_only)
+        structural_metrics = compute_variant_novelty_metrics(seed, structural)
+
+        self.assertEqual(rename_metrics["structural_novel_line_count"], 0)
+        self.assertGreater(rename_metrics["abstract_token_similarity"], 0.95)
+        self.assertGreater(structural_metrics["structural_novel_line_count"], 0)
+        self.assertLess(structural_metrics["abstract_token_similarity"], rename_metrics["abstract_token_similarity"])
+
+    def test_close_unbalanced_blocks_appends_missing_braces(self) -> None:
+        raw = (
+            "int demo(int x) {\n"
+            "if (x > 0) {\n"
+            "return x;\n"
+            "}\n"
+        )
+        balanced = close_unbalanced_blocks(raw)
+        self.assertEqual(balanced, "int demo(int x) {\nif (x > 0) {\nreturn x;\n}\n}")
+
 
 class ValidationTests(unittest.TestCase):
     def test_filter_valid_samples_deduplicates_and_skips_seed_copies(self) -> None:
@@ -500,6 +546,64 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(stats["kept"], 1)
             self.assertEqual(stats["low_anchor_signal"], 1)
             self.assertEqual(kept_rows[0]["idx"], "close")
+
+    def test_filter_valid_samples_rejects_trivial_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            input_path = base / "generated.jsonl"
+            output_path = base / "validated.jsonl"
+            seed = (
+                "int changedline(char *src) {\n"
+                "char buf[8];\n"
+                "strcpy(buf, src);\n"
+                "return buf[0];\n"
+                "}\n"
+            )
+            generated = [
+                {
+                    "idx": "rename_only",
+                    "func": (
+                        "int changedline_copy(char *input) {\n"
+                        "char tmp[8];\n"
+                        "strcpy(tmp, input);\n"
+                        "return tmp[0];\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed,
+                    "augmentation_seed_code": seed,
+                },
+                {
+                    "idx": "structural",
+                    "func": (
+                        "int changedline_guard(char *src) {\n"
+                        "char buf[8];\n"
+                        "size_t n = strlen(src);\n"
+                        "if (n > 0) {\n"
+                        "strcpy(buf, src);\n"
+                        "}\n"
+                        "return buf[0];\n"
+                        "}\n"
+                    ),
+                    "seed_func": seed,
+                    "augmentation_seed_code": seed,
+                },
+            ]
+            input_path.write_text("\n".join(__import__("json").dumps(row) for row in generated) + "\n", encoding="utf-8")
+
+            stats = filter_valid_samples(
+                input_path,
+                output_path,
+                min_novel_line_count=2,
+                min_novel_line_ratio=0.2,
+                min_structural_novel_line_count=1,
+                max_abstract_token_similarity=0.92,
+                reject_trivial_variants=True,
+            )
+            kept_rows = [__import__("json").loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+            self.assertEqual(stats["kept"], 1)
+            self.assertEqual(stats["trivial_variant"], 1)
+            self.assertEqual(kept_rows[0]["idx"], "structural")
 
 
 @unittest.skipUnless(HAS_CALIBRATION_DEPS, "calibration dependencies are not installed")

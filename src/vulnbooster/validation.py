@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import deque
-import re
 from pathlib import Path
 
 from tqdm import tqdm
@@ -11,11 +10,14 @@ import tree_sitter_cpp
 
 from .code_utils import (
     build_anchor_signature,
+    close_unbalanced_blocks,
     compute_code_length_similarity,
     compute_anchor_hit_metrics,
     compute_seed_alignment_metrics,
+    compute_variant_novelty_metrics,
     fingerprint_code,
     sanitize_generated_function,
+    strip_comments,
 )
 from .config import ExperimentConfig
 from .jsonl import iter_jsonl, write_jsonl
@@ -26,25 +28,10 @@ CPP_LANGUAGE = Language(tree_sitter_cpp.language())
 C_PARSER = Parser(C_LANGUAGE)
 CPP_PARSER = Parser(CPP_LANGUAGE)
 
-COMMENT_PATTERN = re.compile(
-    r'(?P<string>"(?:\\.|[^\\"])*")|'
-    r"(?P<char>'(?:\\.|[^\\'])*')|"
-    r'(?P<block_comment>/\*.*?\*/)|'
-    r'(?P<line_comment>//.*?$)',
-    re.DOTALL | re.MULTILINE,
-)
-
-
 def remove_comments_and_blank_lines(code: str) -> str:
     if not code:
         return ""
-
-    def replacer(match: re.Match[str]) -> str:
-        if match.group("block_comment") or match.group("line_comment"):
-            return ""
-        return match.group(0)
-
-    code_no_comments = COMMENT_PATTERN.sub(replacer, code)
+    code_no_comments = strip_comments(code)
     return "\n".join(line for line in code_no_comments.splitlines() if line.strip())
 
 
@@ -145,13 +132,19 @@ def _composite_quality_score(
     prompt_metrics: dict[str, float],
     anchor_metrics: dict[str, float],
     length_similarity: float,
+    novelty_metrics: dict[str, float],
 ) -> float:
     full_score = 0.7 * full_metrics["alignment_score"] + 0.3 * full_metrics["call_overlap"]
     prompt_score = 0.65 * prompt_metrics["alignment_score"] + 0.35 * prompt_metrics["call_overlap"]
     anchor_score = 0.6 * anchor_metrics["call_ratio"] + 0.4 * anchor_metrics["identifier_ratio"]
+    novelty_score = max(
+        novelty_metrics["novel_line_ratio"],
+        novelty_metrics["structural_novel_line_ratio"],
+        1.0 - novelty_metrics["abstract_token_similarity"],
+    )
     if detector_prob is None:
-        return 0.45 * prompt_score + 0.25 * full_score + 0.20 * anchor_score + 0.10 * length_similarity
-    return 0.35 * detector_prob + 0.25 * prompt_score + 0.15 * full_score + 0.20 * anchor_score + 0.05 * length_similarity
+        return 0.38 * prompt_score + 0.22 * full_score + 0.18 * anchor_score + 0.10 * length_similarity + 0.12 * novelty_score
+    return 0.32 * detector_prob + 0.22 * prompt_score + 0.13 * full_score + 0.18 * anchor_score + 0.05 * length_similarity + 0.10 * novelty_score
 
 
 def _rerank_rows_by_quality(
@@ -215,6 +208,11 @@ def filter_valid_samples(
     min_anchor_identifier_hits: int = 0,
     min_anchor_call_hits: int = 0,
     require_anchor_signal: bool = False,
+    min_novel_line_count: int = 0,
+    min_novel_line_ratio: float = 0.0,
+    min_structural_novel_line_count: int = 0,
+    max_abstract_token_similarity: float = 1.0,
+    reject_trivial_variants: bool = False,
 ) -> dict[str, int]:
     rows = list(iter_jsonl(input_path))
     prelim_rows: list[dict] = []
@@ -227,8 +225,10 @@ def filter_valid_samples(
     low_prompt_alignment = 0
     low_anchor_signal = 0
     low_anchor_hits = 0
+    low_novelty = 0
+    trivial_variant = 0
     for row in tqdm(rows, desc="AST Validation", unit="sample"):
-        sanitized_code = sanitize_generated_function(row.get("func", ""))
+        sanitized_code = close_unbalanced_blocks(str(row.get("func", "") or ""))
         if not sanitized_code:
             empty_after_sanitize += 1
             continue
@@ -285,6 +285,19 @@ def filter_valid_samples(
         if expected_identifier_hits and int(anchor_metrics["identifier_hits"]) < expected_identifier_hits:
             low_anchor_hits += 1
             continue
+        novelty_metrics = compute_variant_novelty_metrics(seed_code or prompt_seed_code, cleaned_code)
+        if int(novelty_metrics["novel_line_count"]) < min_novel_line_count:
+            low_novelty += 1
+            continue
+        if float(novelty_metrics["novel_line_ratio"]) < min_novel_line_ratio:
+            low_novelty += 1
+            continue
+        if reject_trivial_variants:
+            enough_structural_novelty = int(novelty_metrics["structural_novel_line_count"]) >= min_structural_novel_line_count
+            varied_enough = float(novelty_metrics["abstract_token_similarity"]) <= max_abstract_token_similarity
+            if not enough_structural_novelty and not varied_enough:
+                trivial_variant += 1
+                continue
         if code_fingerprint in seen_fingerprints:
             duplicate_generated += 1
             continue
@@ -318,6 +331,11 @@ def filter_valid_samples(
         new_row["quality_anchor_call_ratio"] = anchor_metrics["call_ratio"]
         new_row["quality_anchor_identifier_ratio"] = anchor_metrics["identifier_ratio"]
         new_row["quality_has_anchor_signal"] = anchor_metrics["has_anchor_signal"]
+        new_row["quality_novel_line_count"] = novelty_metrics["novel_line_count"]
+        new_row["quality_novel_line_ratio"] = novelty_metrics["novel_line_ratio"]
+        new_row["quality_structural_novel_line_count"] = novelty_metrics["structural_novel_line_count"]
+        new_row["quality_structural_novel_line_ratio"] = novelty_metrics["structural_novel_line_ratio"]
+        new_row["quality_abstract_token_similarity"] = novelty_metrics["abstract_token_similarity"]
         prelim_rows.append(new_row)
 
     kept_rows = prelim_rows
@@ -356,6 +374,11 @@ def filter_valid_samples(
                 "identifier_ratio": float(row.get("quality_anchor_identifier_ratio", 0.0)),
             },
             float(row.get("quality_length_similarity", 0.0)),
+            {
+                "novel_line_ratio": float(row.get("quality_novel_line_ratio", 0.0)),
+                "structural_novel_line_ratio": float(row.get("quality_structural_novel_line_ratio", 0.0)),
+                "abstract_token_similarity": float(row.get("quality_abstract_token_similarity", 1.0)),
+            },
         )
 
     rerank_stats = {
@@ -381,6 +404,8 @@ def filter_valid_samples(
         "low_prompt_alignment": low_prompt_alignment,
         "low_anchor_signal": low_anchor_signal,
         "low_anchor_hits": low_anchor_hits,
+        "low_novelty": low_novelty,
+        "trivial_variant": trivial_variant,
         "low_detector_confidence": low_detector_confidence,
         "low_quality_score": rerank_stats["low_quality_score"],
         "over_seed_budget": rerank_stats["over_seed_budget"],

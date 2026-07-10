@@ -90,6 +90,11 @@ class AugmentationConfig:
     min_identifier_anchor_hits: int
     min_call_anchor_hits: int
     require_anchor_signal: bool
+    min_novel_line_count: int
+    min_novel_line_ratio: float
+    min_structural_novel_line_count: int
+    max_abstract_token_similarity: float
+    reject_trivial_variants: bool
 
 
 @dataclass(slots=True)

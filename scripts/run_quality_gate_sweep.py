@@ -61,6 +61,11 @@ def main() -> None:
     parser.add_argument("--min-anchor-identifier-hits", type=int)
     parser.add_argument("--min-anchor-call-hits", type=int)
     parser.add_argument("--require-anchor-signal", action="store_true")
+    parser.add_argument("--min-novel-line-count", type=int)
+    parser.add_argument("--min-novel-line-ratio", type=float)
+    parser.add_argument("--min-structural-novel-line-count", type=int)
+    parser.add_argument("--max-abstract-token-similarity", type=float)
+    parser.add_argument("--reject-trivial-variants", action="store_true")
     parser.add_argument("--min-kept", type=int, default=4)
     parser.add_argument("--detector-epochs", type=int, default=3)
     parser.add_argument("--detector-batch-size", type=int, default=16)
@@ -82,6 +87,27 @@ def main() -> None:
         else args.min_anchor_call_hits
     )
     require_anchor_signal = args.require_anchor_signal or config.augmentation.require_anchor_signal
+    min_novel_line_count = (
+        config.augmentation.min_novel_line_count
+        if args.min_novel_line_count is None
+        else args.min_novel_line_count
+    )
+    min_novel_line_ratio = (
+        config.augmentation.min_novel_line_ratio
+        if args.min_novel_line_ratio is None
+        else args.min_novel_line_ratio
+    )
+    min_structural_novel_line_count = (
+        config.augmentation.min_structural_novel_line_count
+        if args.min_structural_novel_line_count is None
+        else args.min_structural_novel_line_count
+    )
+    max_abstract_token_similarity = (
+        config.augmentation.max_abstract_token_similarity
+        if args.max_abstract_token_similarity is None
+        else args.max_abstract_token_similarity
+    )
+    reject_trivial_variants = args.reject_trivial_variants or config.augmentation.reject_trivial_variants
 
     experiment_root = Path(args.experiment_root).resolve()
     output_root = Path(args.output_root).resolve()
@@ -136,6 +162,11 @@ def main() -> None:
                             min_anchor_identifier_hits=min_anchor_identifier_hits,
                             min_anchor_call_hits=min_anchor_call_hits,
                             require_anchor_signal=require_anchor_signal,
+                            min_novel_line_count=min_novel_line_count,
+                            min_novel_line_ratio=min_novel_line_ratio,
+                            min_structural_novel_line_count=min_structural_novel_line_count,
+                            max_abstract_token_similarity=max_abstract_token_similarity,
+                            reject_trivial_variants=reject_trivial_variants,
                         )
                         kept = _count_rows(validated_path)
                         if kept < args.min_kept:
@@ -209,6 +240,11 @@ def main() -> None:
             "min_anchor_identifier_hits": min_anchor_identifier_hits,
             "min_anchor_call_hits": min_anchor_call_hits,
             "require_anchor_signal": require_anchor_signal,
+            "min_novel_line_count": min_novel_line_count,
+            "min_novel_line_ratio": min_novel_line_ratio,
+            "min_structural_novel_line_count": min_structural_novel_line_count,
+            "max_abstract_token_similarity": max_abstract_token_similarity,
+            "reject_trivial_variants": reject_trivial_variants,
             "min_kept": args.min_kept,
         },
         "best_result": best_result,

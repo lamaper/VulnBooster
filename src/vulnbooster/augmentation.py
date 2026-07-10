@@ -8,7 +8,14 @@ from typing import Any
 
 from tqdm.asyncio import tqdm
 
-from .code_utils import build_anchor_signature, compute_anchor_hit_metrics, fingerprint_code, sanitize_generated_function
+from .code_utils import (
+    build_anchor_signature,
+    close_unbalanced_blocks,
+    compute_anchor_hit_metrics,
+    compute_variant_novelty_metrics,
+    fingerprint_code,
+    sanitize_generated_function,
+)
 from .config import ExperimentConfig
 from .jsonl import iter_jsonl, write_jsonl
 from .knowledge import CWEKnowledgeBase
@@ -55,7 +62,10 @@ def _build_anchor_constraints(config: ExperimentConfig, source_code: str, seed_c
         "- Keep the same critical operation order as the seed slice, including the same kind of guard checks, data movement, "
         "resource handling, or pointer/index usage that triggers the vulnerability.\n"
         "- Small renaming is allowed, but do not replace the seed's core APIs, data objects, or control structure with unrelated logic.\n"
-        "- Do not copy the seed verbatim. Each candidate should change several non-comment lines, auxiliary state, or branch details while preserving the same vulnerability mechanism.\n"
+        "- Do not copy the seed verbatim. Each candidate should change several executable lines while preserving the same vulnerability mechanism.\n"
+        "- Make each candidate non-trivial by using at least one mutation style such as: adding auxiliary local state or buffers, changing guard or branch details, or changing the dataflow path into the same vulnerable sink.\n"
+        "- Across the candidate set, do not reuse the exact same mutation style every time.\n"
+        "- Output syntactically complete C/C++ functions with balanced braces.\n"
         "- If you cannot satisfy these constraints, output nothing for that candidate."
     )
     return anchor_signature, constraint_block
@@ -73,6 +83,20 @@ def _passes_anchor_gate(config: ExperimentConfig, anchor_signature: dict[str, li
     if config.augmentation.require_anchor_signal and not bool(metrics["has_anchor_signal"]):
         return False, metrics
     return meets_call_requirement and meets_identifier_requirement, metrics
+
+
+def _passes_novelty_gate(config: ExperimentConfig, seed_code: str, candidate_code: str) -> tuple[bool, dict[str, float | int]]:
+    metrics = compute_variant_novelty_metrics(seed_code, candidate_code)
+    if int(metrics["novel_line_count"]) < config.augmentation.min_novel_line_count:
+        return False, metrics
+    if float(metrics["novel_line_ratio"]) < config.augmentation.min_novel_line_ratio:
+        return False, metrics
+    if config.augmentation.reject_trivial_variants:
+        enough_structural_novelty = int(metrics["structural_novel_line_count"]) >= config.augmentation.min_structural_novel_line_count
+        varied_enough = float(metrics["abstract_token_similarity"]) <= config.augmentation.max_abstract_token_similarity
+        if not enough_structural_novelty and not varied_enough:
+            return False, metrics
+    return True, metrics
 
 
 class CoTAugmenter:
@@ -138,19 +162,21 @@ class CoTAugmenter:
             source_field, code = pick_code(row)
             return row, source_field, code, *(await self._run_chain(code, str(row.get("func", "") or ""), semaphore))
 
-        async def _run_all() -> tuple[list[list[dict[str, Any]]], int, int]:
+        async def _run_all() -> tuple[list[list[dict[str, Any]]], int, int, int]:
             semaphore = asyncio.Semaphore(self.config.llm.concurrency_limit)
             task_rows = [row for row in rows if pick_code(row)[1]]
             tasks = [asyncio.create_task(_generate_for_row(row, semaphore)) for row in task_rows]
             results: list[list[dict[str, Any]]] = []
             anchor_rejected = 0
             copy_rejected = 0
+            trivial_rejected = 0
             for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="CoT Augment", unit="sample"):
                 row, source_field, source_code, generated_codes, anchor_signature = await task
                 generated_rows: list[dict[str, Any]] = []
-                seed_fingerprint = fingerprint_code(str(row.get("func", "") or ""))
+                seed_code = str(row.get("func", "") or "")
+                seed_fingerprint = fingerprint_code(seed_code)
                 for i, gen_code in enumerate(generated_codes):
-                    cleaned_code = sanitize_generated_function(gen_code)
+                    cleaned_code = close_unbalanced_blocks(gen_code)
                     if not cleaned_code:
                         continue
                     if seed_fingerprint and fingerprint_code(cleaned_code) == seed_fingerprint:
@@ -160,9 +186,13 @@ class CoTAugmenter:
                     if not passes_anchor_gate:
                         anchor_rejected += 1
                         continue
+                    passes_novelty_gate, novelty_metrics = _passes_novelty_gate(self.config, seed_code, cleaned_code)
+                    if not passes_novelty_gate:
+                        trivial_rejected += 1
+                        continue
                     new_row = copy.deepcopy(row)
                     new_row["func"] = cleaned_code
-                    new_row["seed_func"] = row.get("func", "")
+                    new_row["seed_func"] = seed_code
                     new_row["original_idx"] = row.get("idx")
                     new_row["augmentation_seed_field"] = source_field
                     new_row["augmentation_seed_code"] = source_code
@@ -170,13 +200,18 @@ class CoTAugmenter:
                     new_row["augmentation_anchor_identifiers"] = anchor_signature["identifiers"]
                     new_row["augmentation_anchor_call_hits"] = anchor_metrics["call_hits"]
                     new_row["augmentation_anchor_identifier_hits"] = anchor_metrics["identifier_hits"]
+                    new_row["augmentation_novel_line_count"] = novelty_metrics["novel_line_count"]
+                    new_row["augmentation_novel_line_ratio"] = novelty_metrics["novel_line_ratio"]
+                    new_row["augmentation_structural_novel_line_count"] = novelty_metrics["structural_novel_line_count"]
+                    new_row["augmentation_structural_novel_line_ratio"] = novelty_metrics["structural_novel_line_ratio"]
+                    new_row["augmentation_abstract_token_similarity"] = novelty_metrics["abstract_token_similarity"]
                     new_row["idx"] = f"{row.get('idx')}_cot_{i}"
                     new_row["is_cot_enhanced"] = True
                     generated_rows.append(new_row)
                 results.append(generated_rows)
-            return results, anchor_rejected, copy_rejected
+            return results, anchor_rejected, copy_rejected, trivial_rejected
 
-        grouped_rows, anchor_rejected, copy_rejected = asyncio.run(_run_all())
+        grouped_rows, anchor_rejected, copy_rejected, trivial_rejected = asyncio.run(_run_all())
         flat_rows = [row for group in grouped_rows for row in group]
         write_jsonl(output_path, flat_rows)
         return {
@@ -184,6 +219,7 @@ class CoTAugmenter:
             "generated": len(flat_rows),
             "anchor_rejected": anchor_rejected,
             "copy_rejected": copy_rejected,
+            "trivial_rejected": trivial_rejected,
         }
 
 
@@ -229,7 +265,9 @@ class CWEAugmenter:
                 "[Additional Rules]\n"
                 "- Preserve the same vulnerability trigger and the same kind of vulnerable operation.\n"
                 "- Keep the same major API family, object family, and control-flow style as the seed.\n"
-                "- Do not output unrelated examples that only share the same CWE label.\n\n"
+                "- Do not output unrelated examples that only share the same CWE label.\n"
+                "- Each candidate must differ in several executable lines and use a non-trivial mutation such as auxiliary state, branch or guard mutation, or changed dataflow into the same vulnerable sink.\n"
+                "- Across the set, diversify the mutation styles instead of repeating the same tiny tweak.\n\n"
                 f"[Output Format]\nWrap EACH generated function in {TICK3}c blocks."
             )
         return (
@@ -240,6 +278,9 @@ class CWEAugmenter:
             f"{anchor_summary}"
             f"{anchor_constraints}\n\n"
             f"[Your Task]\nGenerate {self.config.augmentation.generate_k} new vulnerable C functions that stay semantically near the seed.\n\n"
+            "[Additional Rules]\n"
+            "- Each candidate must differ in several executable lines and use a non-trivial mutation such as auxiliary state, branch or guard mutation, or changed dataflow into the same vulnerable sink.\n"
+            "- Across the set, diversify the mutation styles instead of repeating the same tiny tweak.\n\n"
             f"[Output Format]\nWrap EACH generated function in {TICK3}c blocks."
         )
 
@@ -295,7 +336,7 @@ class CWEAugmenter:
         ) -> tuple[dict[str, Any], str, str, str, dict[str, list[str]], list[str]]:
             return row, source_field, source_code, seed_code, anchor_signature, await self._generate(prompt, semaphore)
 
-        async def _run_all() -> tuple[list[list[dict[str, Any]]], int, int]:
+        async def _run_all() -> tuple[list[list[dict[str, Any]]], int, int, int]:
             semaphore = asyncio.Semaphore(self.config.llm.concurrency_limit)
             tasks = [
                 asyncio.create_task(_generate_for_row(row, source_field, source_code, seed_code, anchor_signature, prompt, semaphore))
@@ -304,12 +345,13 @@ class CWEAugmenter:
             results: list[list[dict[str, Any]]] = []
             anchor_rejected = 0
             copy_rejected = 0
+            trivial_rejected = 0
             for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="CWE Augment", unit="sample"):
                 row, source_field, source_code, seed_code, anchor_signature, generated = await task
                 generated_rows: list[dict[str, Any]] = []
                 seed_fingerprint = fingerprint_code(seed_code)
                 for i, gen_code in enumerate(generated):
-                    cleaned_code = sanitize_generated_function(gen_code)
+                    cleaned_code = close_unbalanced_blocks(gen_code)
                     if not cleaned_code:
                         continue
                     if seed_fingerprint and fingerprint_code(cleaned_code) == seed_fingerprint:
@@ -318,6 +360,10 @@ class CWEAugmenter:
                     passes_anchor_gate, anchor_metrics = _passes_anchor_gate(self.config, anchor_signature, cleaned_code)
                     if not passes_anchor_gate:
                         anchor_rejected += 1
+                        continue
+                    passes_novelty_gate, novelty_metrics = _passes_novelty_gate(self.config, seed_code, cleaned_code)
+                    if not passes_novelty_gate:
+                        trivial_rejected += 1
                         continue
                     new_row = copy.deepcopy(row)
                     new_row["func"] = cleaned_code
@@ -329,13 +375,18 @@ class CWEAugmenter:
                     new_row["augmentation_anchor_identifiers"] = anchor_signature["identifiers"]
                     new_row["augmentation_anchor_call_hits"] = anchor_metrics["call_hits"]
                     new_row["augmentation_anchor_identifier_hits"] = anchor_metrics["identifier_hits"]
+                    new_row["augmentation_novel_line_count"] = novelty_metrics["novel_line_count"]
+                    new_row["augmentation_novel_line_ratio"] = novelty_metrics["novel_line_ratio"]
+                    new_row["augmentation_structural_novel_line_count"] = novelty_metrics["structural_novel_line_count"]
+                    new_row["augmentation_structural_novel_line_ratio"] = novelty_metrics["structural_novel_line_ratio"]
+                    new_row["augmentation_abstract_token_similarity"] = novelty_metrics["abstract_token_similarity"]
                     new_row["idx"] = f"{row.get('idx')}_cwe_{i}"
                     new_row["is_cwe_enhanced"] = True
                     generated_rows.append(new_row)
                 results.append(generated_rows)
-            return results, anchor_rejected, copy_rejected
+            return results, anchor_rejected, copy_rejected, trivial_rejected
 
-        grouped_rows, anchor_rejected, copy_rejected = asyncio.run(_run_all())
+        grouped_rows, anchor_rejected, copy_rejected, trivial_rejected = asyncio.run(_run_all())
         flat_rows = [row for group in grouped_rows for row in group]
         write_jsonl(output_path, flat_rows)
         return {
@@ -343,4 +394,5 @@ class CWEAugmenter:
             "generated": len(flat_rows),
             "anchor_rejected": anchor_rejected,
             "copy_rejected": copy_rejected,
+            "trivial_rejected": trivial_rejected,
         }

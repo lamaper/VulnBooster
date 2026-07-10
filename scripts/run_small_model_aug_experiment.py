@@ -68,6 +68,11 @@ def main() -> None:
     parser.add_argument("--augmentation-min-anchor-identifier-hits", type=int)
     parser.add_argument("--augmentation-min-anchor-call-hits", type=int)
     parser.add_argument("--augmentation-require-anchor-signal", action="store_true")
+    parser.add_argument("--augmentation-min-novel-line-count", type=int)
+    parser.add_argument("--augmentation-min-novel-line-ratio", type=float)
+    parser.add_argument("--augmentation-min-structural-novel-line-count", type=int)
+    parser.add_argument("--augmentation-max-abstract-token-similarity", type=float)
+    parser.add_argument("--augmentation-reject-trivial-variants", action="store_true")
     args = parser.parse_args()
 
     from vulnbooster.augmentation import CoTAugmenter, CWEAugmenter
@@ -98,6 +103,27 @@ def main() -> None:
         else args.augmentation_min_anchor_call_hits
     )
     require_anchor_signal = args.augmentation_require_anchor_signal or config.augmentation.require_anchor_signal
+    min_novel_line_count = (
+        config.augmentation.min_novel_line_count
+        if args.augmentation_min_novel_line_count is None
+        else args.augmentation_min_novel_line_count
+    )
+    min_novel_line_ratio = (
+        config.augmentation.min_novel_line_ratio
+        if args.augmentation_min_novel_line_ratio is None
+        else args.augmentation_min_novel_line_ratio
+    )
+    min_structural_novel_line_count = (
+        config.augmentation.min_structural_novel_line_count
+        if args.augmentation_min_structural_novel_line_count is None
+        else args.augmentation_min_structural_novel_line_count
+    )
+    max_abstract_token_similarity = (
+        config.augmentation.max_abstract_token_similarity
+        if args.augmentation_max_abstract_token_similarity is None
+        else args.augmentation_max_abstract_token_similarity
+    )
+    reject_trivial_variants = args.augmentation_reject_trivial_variants or config.augmentation.reject_trivial_variants
 
     output_root = Path(args.output_root).resolve()
     data_root = output_root / "data"
@@ -128,6 +154,11 @@ def main() -> None:
             "augmentation_min_anchor_identifier_hits": min_anchor_identifier_hits,
             "augmentation_min_anchor_call_hits": min_anchor_call_hits,
             "augmentation_require_anchor_signal": require_anchor_signal,
+            "augmentation_min_novel_line_count": min_novel_line_count,
+            "augmentation_min_novel_line_ratio": min_novel_line_ratio,
+            "augmentation_min_structural_novel_line_count": min_structural_novel_line_count,
+            "augmentation_max_abstract_token_similarity": max_abstract_token_similarity,
+            "augmentation_reject_trivial_variants": reject_trivial_variants,
         }
     }
 
@@ -236,6 +267,11 @@ def main() -> None:
         min_anchor_identifier_hits=min_anchor_identifier_hits,
         min_anchor_call_hits=min_anchor_call_hits,
         require_anchor_signal=require_anchor_signal,
+        min_novel_line_count=min_novel_line_count,
+        min_novel_line_ratio=min_novel_line_ratio,
+        min_structural_novel_line_count=min_structural_novel_line_count,
+        max_abstract_token_similarity=max_abstract_token_similarity,
+        reject_trivial_variants=reject_trivial_variants,
     )
     merged_train_path = aug_root / "train_augmented.jsonl"
     merge_stats = merge_jsonl(
