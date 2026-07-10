@@ -25,6 +25,14 @@ from vulnbooster.sampling import build_balanced_smoke_set
 from vulnbooster.code_utils import project_slice_onto_original, sanitize_generated_function
 from vulnbooster.validation import filter_valid_samples
 
+try:
+    import numpy as np
+    from vulnbooster.calibration import compute_binary_metrics, select_best_threshold
+
+    HAS_CALIBRATION_DEPS = True
+except ModuleNotFoundError:
+    HAS_CALIBRATION_DEPS = False
+
 
 class ConfigTests(unittest.TestCase):
     def test_load_smoke_config(self) -> None:
@@ -397,6 +405,26 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(stats["over_seed_budget"], 1)
             self.assertEqual(kept_rows[0]["idx"], "best")
             self.assertEqual(kept_rows[0]["quality_rank_within_seed"], 1)
+
+
+@unittest.skipUnless(HAS_CALIBRATION_DEPS, "calibration dependencies are not installed")
+class CalibrationTests(unittest.TestCase):
+    def test_select_best_threshold_can_raise_precision(self) -> None:
+        labels = np.array([0, 0, 1, 1], dtype=np.int64)
+        probs = np.array([0.2, 0.55, 0.58, 0.95], dtype=np.float32)
+
+        best_precision = select_best_threshold(
+            labels,
+            probs,
+            objective="precision",
+            threshold_min=0.5,
+            threshold_max=0.8,
+            num_thresholds=7,
+        )
+        default_metrics = compute_binary_metrics(labels, probs, 0.5)
+
+        self.assertGreaterEqual(best_precision["precision"], default_metrics["precision"])
+        self.assertGreater(best_precision["threshold"], 0.5)
 
 
 if __name__ == "__main__":
