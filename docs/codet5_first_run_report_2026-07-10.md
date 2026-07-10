@@ -145,11 +145,21 @@ CodeT5 切片增强后：
 
 ## 6. 尚未结束的任务
 
-为了拿到更干净的结论，还同步启动了一条“从教师切片开始完整重跑”的后台任务：
+为了拿到更干净的结论，还同步启动了“从教师切片开始完整重跑”的后台任务。
 
-1. 远端目录：`~/VulnBooster/artifacts/experiments/codet5_line_slice_v1_full`
-2. 日志：`~/VulnBooster/artifacts/experiments/codet5_line_slice_v1_full/run.log`
-3. 当前状态：仍在后台运行
+### 6.1 首次全量任务状态
+
+1. 首次目录：`~/VulnBooster/artifacts/experiments/codet5_line_slice_v1_full`
+2. 首次状态：已退出
+3. 退出原因：`Seq2SeqTrainer` 在 `transformers==4.44.2` 下不接受 `processing_class=`
+
+该兼容问题已在代码中修复。
+
+### 6.2 当前重启后的全量任务
+
+1. 当前目录：`~/VulnBooster/artifacts/experiments/codet5_line_slice_v1_full_rerun`
+2. 当前日志：`~/VulnBooster/artifacts/experiments/codet5_line_slice_v1_full_rerun/run.log`
+3. 当前状态：后台运行中
 
 这条任务的意义是：
 
