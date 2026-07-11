@@ -540,6 +540,7 @@ def train_codet5_slicer(
         dataloader_pin_memory=torch.cuda.is_available(),
         report_to=[],
         save_total_limit=2,
+        save_only_model=True,
     )
 
     trainer = Seq2SeqTrainer(

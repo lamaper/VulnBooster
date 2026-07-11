@@ -192,6 +192,7 @@ def train_classifier(
         dataloader_pin_memory=torch.cuda.is_available(),
         report_to=[],
         save_total_limit=2,
+        save_only_model=True,
     )
 
     trainer = DynamicLossTrainer(

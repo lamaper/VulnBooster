@@ -156,6 +156,60 @@
 1. `CodeT5` 已成功接入增强主链路。
 2. 它不是只改善切片中间指标，而是已对最终检测结果产生正向传导。
 
+### 5.3 CodeT5 + V4 precision 定向实验现状
+
+截至 `2026-07-10`，远端已完成一轮 `CodeT5 + v4(cwe) + 候选重排 + prompt-slice 质量门` 的完整实验重跑：
+
+- 目录：`~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_balanced_43990702_rerun1`
+
+这轮的关键现象不是模型训练失败，而是：
+
+1. `CodeT5` 切片链路已经成功跑通。
+2. 6 个 FN 样本都产生了非空切片。
+3. 增强器共生成 `17` 条候选样本。
+4. 但验证阶段 `17/17` 全部被 `low_prompt_slice_quality` 拒绝。
+
+也就是说，当前主要矛盾不是 `CodeT5` 本身没法切，而是：
+
+**prompt-slice 质量门过严，导致增强样本无法进入训练集。**
+
+因此，下一步优先动作不是继续改模型结构，而是：
+
+1. 放松 `min_prompt_slice_static_precision`
+2. 放松 `min_prompt_slice_static_recall`
+3. 放宽 `max_prompt_slice_ratio`
+
+目标是先恢复“有增强样本可回灌”，再看 precision 能否继续上推。
+
+### 5.4 rerun2 的最新阻塞点
+
+截至 `2026-07-11`，放松 prompt-slice 质量门后的 `rerun2`：
+
+- 目录：`~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_relaxed_43990702_rerun2`
+
+已经成功跑过：
+
+1. 教师切片
+2. 行级标签构造
+3. `CodeT5` 切片器训练与评估
+
+其中 `CodeT5` 评估日志显示：
+
+- Precision: `0.6982`
+- Recall: `0.7445`
+- F1: `0.7206`
+- ExactMatch: `0.3625`
+- EmptyRate: `0.0`
+
+但该轮没有在增强阶段中断，而是在后续 `baseline detector` 训练保存 checkpoint 时失败。根因不是模型逻辑，而是：
+
+**远端根分区 `/` 已满，`torch.save(optimizer state)` 写盘失败。**
+
+因此当前新的默认处理原则是：
+
+1. 远端优先清理 `uv` 缓存和失败实验目录。
+2. 本地代码中所有训练器统一启用 `save_only_model=True`，减少 checkpoint 写盘压力。
+
 ## 6. 当前理解下的论文主线
 
 最合理的论文主线是：
@@ -272,3 +326,17 @@
 1. 如果 `line_slice` 相对原函数过宽，可直接拒绝该 seed 派生的增强样本。
 2. 如果 `line_slice` 与静态切片重合度太低，可直接拒绝。
 3. 这组参数更适合拿来冲 precision，而不是冲 recall。
+
+### 10.3 当前推荐的放松区间
+
+根据 `rerun1` 结果，当前建议下一轮默认从下列区间开始扫：
+
+- `--prompt-slice-min-static-precision 0.15 ~ 0.25`
+- `--prompt-slice-min-static-recall 0.20 ~ 0.35`
+- `--prompt-slice-max-ratio 0.60 ~ 0.75`
+
+原因：
+
+1. `rerun1` 使用 `0.35 / 0.45 / 0.45` 时，17 条候选全部被拒。
+2. 说明当前静态切片与 CodeT5 提示切片之间的偏差，比预想的大。
+3. 下一轮应先保证增强样本能保留一批，再判断 precision / recall / F1 / MCC 的真实变化。
