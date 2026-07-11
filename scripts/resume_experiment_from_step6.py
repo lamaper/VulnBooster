@@ -7,6 +7,7 @@ from pathlib import Path
 from vulnbooster.augmentation import CoTAugmenter, CWEAugmenter
 from vulnbooster.codet5_slicer import predict_codet5_slices
 from vulnbooster.config import load_experiment_config
+from vulnbooster.env import load_local_env
 from vulnbooster.merge import merge_jsonl
 from vulnbooster.training import train_classifier
 from vulnbooster.validation import filter_valid_samples
@@ -40,6 +41,7 @@ def main() -> None:
     parser.add_argument("--summary-name", default="summary_resume.json")
     args = parser.parse_args()
 
+    load_local_env()
     config = load_experiment_config(args.config)
     config.training.epochs = args.detector_epochs
     config.training.batch_size = args.detector_batch_size
