@@ -10,6 +10,12 @@
 
 `PrimeVul 数据清洗 -> Joern 静态切片 -> LLM 语义初筛 -> LLM 融合精炼得到教师切片 refined_code -> line_slicer.py 对齐回原函数并生成行级标签 -> 训练小模型切片器 -> 用切片器给 baseline 漏报样本预测 line_slice -> augmentation.py 基于切片、CWE 知识和漏洞机理生成增强样本 -> validation.py 做语法/对齐/锚点/非平凡性过滤 -> merge.py 合并增强训练集 -> training.py 重训检测器 -> calibration.py / 报告脚本做阈值校准与评估`
 
+教师切片三阶段总结见 `docs/teacher_slice_stage_summary.md`：
+
+- `static_slice`：Joern 静态切片，作为结构先验、hint、anchor、fallback。
+- `llm_slice`：LLM 初次切片，作为语义先验和融合输入。
+- `refined_code`：LLM 融合精炼后的最终教师切片，是训练小模型行级切片器的主监督来源。
+
 ## 2. 当前代码结构
 
 ### 2.1 核心包
@@ -209,6 +215,43 @@
 
 1. 远端优先清理 `uv` 缓存和失败实验目录。
 2. 本地代码中所有训练器统一启用 `save_only_model=True`，减少 checkpoint 写盘压力。
+
+### 5.5 rerun3 的关键结论
+
+截至 `2026-07-11`，远端已经完成两轮去除或放开 prompt-slice 质量门的 `rerun3`：
+
+1. `codet5_v4_pre_no_slice_gate_43990702_rerun3`
+2. `codet5_v4_pre_open_slice_gate_43990702_rerun3`
+
+这两轮最重要的科研结论已经明确：
+
+1. `low_prompt_slice_quality` 的确是前面 0 样本保留的主因。
+2. 一旦去掉或放开这道门，增强样本就能真正进入训练集。
+
+具体表现：
+
+- `no_slice_gate`
+  - `validated_rows = 4`
+  - `merged_train_rows = 204`
+  - augmented:
+    - Precision `0.6604`
+    - Recall `0.8750`
+    - F1 `0.7527`
+    - MCC `0.4494`
+- `open_slice_gate`
+  - `validated_rows = 3`
+  - `merged_train_rows = 203`
+  - augmented:
+    - Precision `0.6800`
+    - Recall `0.8500`
+    - F1 `0.7556`
+    - MCC `0.4648`
+
+当前判断：
+
+1. `open_slice_gate` 是当前更好的绝对结果。
+2. `no_slice_gate` 证明了“不是 CodeT5 不行，而是门卡太严”。
+3. 当前最佳 precision 约 `0.68`，说明链路已经开始产生真实正增益，但距离 `0.78 ~ 0.80` 还有明显差距。
 
 ## 6. 当前理解下的论文主线
 
