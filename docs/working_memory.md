@@ -253,6 +253,60 @@
 2. `no_slice_gate` 证明了“不是 CodeT5 不行，而是门卡太严”。
 3. 当前最佳 precision 约 `0.68`，说明链路已经开始产生真实正增益，但距离 `0.78 ~ 0.80` 还有明显差距。
 
+### 5.6 rerun7 结果与结论
+
+运行时间：2026-07-12
+
+远端目录：
+
+- `~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_precision_052_q077_g4_43990702_rerun7`
+
+本轮目的：
+
+- 在 rerun6 的 `quality_score=0.77` 附近小幅提高 detector 置信门，尝试提升 precision。
+- 将 `generate_k` 从 3 提到 4，让每个 FN seed 多生成候选，再由质量重排选 top-1。
+
+关键参数：
+
+- `--generate-k 4`
+- `--augmentation-detector-min-prob 0.52`
+- `--augmentation-min-quality-score 0.77`
+- `--augmentation-max-per-seed 1`
+- `--prompt-slice-min-static-precision 0.0`
+- `--prompt-slice-min-static-recall 0.0`
+- `--prompt-slice-max-ratio 1.0`
+
+结果：
+
+- baseline detector:
+  - precision `0.6604`
+  - recall `0.8750`
+  - f1 `0.7527`
+  - mcc `0.4494`
+- augmentation:
+  - FN seeds `5`
+  - generated `18`
+  - kept `1`
+  - merged train rows `201`
+  - rejection: `low_detector_confidence=11`, `low_quality_score=3`, `over_seed_budget=3`
+- augmented detector:
+  - precision `0.6429`
+  - recall `0.9000`
+  - f1 `0.7500`
+  - mcc `0.4364`
+- gain:
+  - precision `-0.0175`
+  - recall `+0.0250`
+  - f1 `-0.0027`
+  - mcc `-0.0130`
+
+结论：
+
+1. `detector_min_prob=0.52` 与 `quality_score=0.77` 叠加后过窄，只保留 1 条增强样本。
+2. 单纯提高 `generate_k` 不能抵消过严 detector/quality 门控。
+3. 当前最好的 absolute precision 仍是 `rerun3 open_slice_gate` 的 `0.6800`。
+4. 下一轮不宜继续提高 detector/quality 阈值，应该转向“放宽保留数量 + 改训练/采样权重”或“对候选做离线分桶选择”，否则容易继续 0-1 样本保留。
+
 ## 6. 当前理解下的论文主线
 
 最合理的论文主线是：
