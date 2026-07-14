@@ -136,13 +136,280 @@ refined_code 是最终教师目标
 2. 当前不再优先大改生成器 prompt 主结构。
 3. 后续主要优化切片器和筛选器。
 
-### 4.1 原始 baseline 结果
+### 4.1 V3 是怎么做的
+
+V3 的核心目标，是先解决增强样本的三个基础问题：
+
+1. 不要语义漂移到无关 toy example。
+2. 不要只是复制原函数或做变量改名。
+3. 生成代码必须能通过基本语法检查，能真正进入训练集。
+
+因此 V3 的原理可以概括为：
+
+```text
+用切片定位漏洞核心语境
+  -> 从 seed 中抽取稳定语义锚点
+  -> 让 LLM 围绕同一漏洞机理做非平凡变异
+  -> 用锚点、复制检测、非平凡性和语法检查过滤
+  -> 只保留和原漏洞语义近、但代码形式有变化的增强样本
+```
+
+对应实现主要在：
+
+- `src/vulnbooster/augmentation.py::CoTAugmenter`
+- `src/vulnbooster/code_utils.py`
+- `src/vulnbooster/validation.py`
+
+#### 4.1.1 V3 的输入
+
+V3 不直接拿完整函数盲目生成，而是按优先级选择更聚焦的 seed 代码：
+
+```text
+line_slice > refined_code > llm_slice > func
+```
+
+其中：
+
+- `line_slice`：小模型对 baseline 漏报样本预测出的漏洞相关切片。
+- `refined_code`：Joern + LLM 融合得到的教师切片。
+- `llm_slice`：LLM 初筛切片。
+- `func`：原始完整函数，作为最后回退。
+
+这样做的原因是：
+
+1. 切片比完整函数更聚焦，可以减少 LLM 被无关上下文带偏。
+2. 生成器围绕漏洞核心路径做变异，而不是围绕整个函数随意扩写。
+3. 对 baseline 漏报样本增强时，可以重点补强模型原本没学好的漏洞区域。
+
+#### 4.1.2 V3 的锚点约束
+
+V3 会从 seed 代码中抽取两类锚点：
+
+1. API / 函数调用锚点。
+2. 变量、类型、上下文对象等 identifier 锚点。
+
+对应逻辑：
+
+- `build_anchor_signature()`
+- `_build_anchor_constraints()`
+- `_passes_anchor_gate()`
+
+这些锚点会写进 prompt，例如要求：
+
+```text
+Preserve the same vulnerability mechanism.
+Reuse key API/function anchors.
+Reuse key variable/type/context anchors.
+Keep the same critical operation order.
+Do not switch to unrelated demos.
+```
+
+这样做的原理是：
+
+- 漏洞样本增强最怕“只共享 CWE 标签，但软件上下文完全变了”。
+- 例如原样本是内核对象释放顺序错误，LLM 却生成一个普通数组越界 toy example，这种样本会污染训练。
+- 锚点约束要求生成样本复用原 seed 的关键 API、关键对象和控制/数据流骨架，从而压住语义漂移。
+
+#### 4.1.3 V3 的 CoT 生成流程
+
+V3 使用链式提示，而不是一次性要求 LLM 直接生成。
+
+`CoTAugmenter` 的步骤是：
+
+```text
+Step 1: 总结应用场景
+Step 2: 识别具体漏洞类型和触发条件
+Step 3: 抽取漏洞模式、关键数据/控制依赖、关键 API/identifier
+Step 4: 生成若干个相似但非复制的 vulnerable functions
+```
+
+这样做的目的：
+
+1. 先让 LLM 理解上下文，再生成。
+2. 让模型显式识别漏洞触发条件。
+3. 让生成样本围绕同一漏洞模式变异。
+4. 减少“一步生成”导致的漏洞类型跑偏。
+
+#### 4.1.4 V3 的非平凡变异约束
+
+V3 不接受只改变量名、只改注释、只换格式的样本。
+
+过滤指标包括：
+
+- `novel_line_count`
+- `novel_line_ratio`
+- `structural_novel_line_count`
+- `structural_novel_line_ratio`
+- `abstract_token_similarity`
+
+对应逻辑：
+
+- `_passes_novelty_gate()`
+- `compute_variant_novelty_metrics()`
+
+核心判断是：
+
+```text
+生成样本既不能和 seed 太像，
+也不能偏离 seed 的漏洞机理。
+```
+
+所以 V3 允许的变异包括：
+
+- 增加辅助局部变量。
+- 改变 guard 或分支条件。
+- 改变数据流进入同一危险 sink 的路径。
+- 引入中间状态或临时 buffer。
+- 调整资源释放、检查、使用顺序。
+
+但 V3 不希望出现：
+
+- 原样复制。
+- 仅变量重命名。
+- 只改变注释或空白。
+- 与原 seed 完全无关的新 toy example。
+
+#### 4.1.5 V3 的语法修复与验证
+
+LLM 生成 C/C++ 函数时，经常会缺右括号或代码块不平衡。
+
+V3 增加了保守语法修复：
+
+- `close_unbalanced_blocks()`
+- `sanitize_generated_function()`
+
+随后再进入 `validation.py`：
+
+- Tree-sitter 语法检查。
+- 与 seed 的 identifier/call 对齐检查。
+- 锚点命中检查。
+- 非平凡性检查。
+- detector 置信度过滤。
+- quality score 重排。
+
+这使得增强样本从“能生成文本”变成了“能形成可训练数据”。
+
+### 4.2 V4 是怎么做的
+
+V4 的核心目标，是解决 V3 仍然存在的一个问题：
+
+```text
+V3 能保证样本不太漂移，但不同 CWE / 漏洞机理的生成策略还不够细。
+```
+
+也就是说，V3 虽然要求“保持同一漏洞机制”，但 prompt 对不同漏洞类型的处理仍然比较统一。
+
+V4 在 V3 基础上加入了“CWE 知识 + 漏洞机理分流”，让不同漏洞家族使用不同生成策略。
+
+对应实现主要在：
+
+- `src/vulnbooster/augmentation.py::CWEAugmenter`
+- `src/vulnbooster/augmentation.py::infer_mechanism_family`
+- `src/vulnbooster/augmentation.py::build_mechanism_guidance`
+- `src/vulnbooster/knowledge.py`
+
+#### 4.2.1 V4 的整体流程
+
+V4 的流程是：
+
+```text
+输入 seed 切片 / 原函数
+  -> 读取样本 CWE
+  -> 从 CWE 知识库取 definition 和 manifestation
+  -> 结合 CWE、代码和知识库描述推断漏洞机理家族
+  -> 为该机理家族构造专门的 mutation plan
+  -> 加入 V3 的锚点约束和非平凡性约束
+  -> 让 LLM 生成机制一致但形式不同的 vulnerable functions
+  -> 经过 anchor / novelty / syntax / detector / quality 过滤
+```
+
+#### 4.2.2 V4 的漏洞机理家族
+
+当前 V4 支持以下机理家族：
+
+| 机理家族 | 含义 | 典型 CWE / 场景 |
+|---|---|---|
+| `memory_bounds` | 内存边界、buffer、index、offset、长度关系错误 | CWE-119、CWE-120、CWE-125、CWE-787 等 |
+| `null_deref` | 空指针或对象引用未经充分保证就被解引用 | CWE-476、CWE-690 |
+| `integer_size` | 整数溢出、截断、符号错误影响 size / offset / allocation | CWE-190、CWE-191、CWE-680 等 |
+| `resource_lifecycle` | 释放、复用、所有权、refcount、cleanup 顺序错误 | CWE-415、CWE-416、CWE-672 等 |
+| `input_validation` | 外部输入、权限、状态、flag 验证不充分 | CWE-20、CWE-285、CWE-287 等 |
+| `generic_contextual` | CWE 标签过宽时，要求紧贴 seed 上下文做变异 | 兜底类型 |
+
+机理识别不只看 CWE 编号，也会结合：
+
+- CWE 名称。
+- CWE definition。
+- CWE manifestation。
+- seed 代码中的 API、关键字和操作模式。
+
+例如：
+
+- 看到 `CWE-787` 或 buffer/index/copy/write 相关模式，优先归入 `memory_bounds`。
+- 看到 `CWE-476`、null pointer、`->`、dereference，归入 `null_deref`。
+- 看到 overflow、size_t、cast、allocation size，归入 `integer_size`。
+- 看到 free、release、cleanup、refcount、close、unlock，归入 `resource_lifecycle`。
+
+#### 4.2.3 V4 的机理专属变异策略
+
+V4 为每个机理家族设置不同的 mutation plan。
+
+例如 `memory_bounds`：
+
+- 通过额外临时变量或 offset 改写 copy/read/write 长度。
+- 添加看似保护性的 guard，但检查错误变量或错误边界。
+- 改变目标 buffer、index、allocation size 的计算方式，让 size mismatch 仍然存在。
+
+例如 `null_deref`：
+
+- 引入 alias 或临时指针，让检查发生在一个引用上，但解引用发生在另一个引用上。
+- 把解引用移动到 fallback / error-handling 分支。
+- 增加分支状态，让某一路径看似检查过但实际仍可能空指针解引用。
+
+例如 `integer_size`：
+
+- 通过 cast、累加器、中间变量传播错误 size。
+- 添加错误类型或错误比较的 guard。
+- 改变乘法、加法、shift、减法表达式，但保留 arithmetic-to-sink 依赖。
+
+例如 `resource_lifecycle`：
+
+- 增加 cleanup 或 error path，让 alias、handle、object state 不一致。
+- 改变 release、reset、reuse 的顺序。
+- 引入分支状态，让某一路径发生 unsafe reuse 或 double release。
+
+V4 的原理是：
+
+```text
+同一个 CWE 下可能有不同漏洞触发机制；
+同一种触发机制也可以通过不同代码变异表现出来。
+因此增强不应只依赖 CWE 标签，而应按漏洞机理生成。
+```
+
+#### 4.2.4 V4 相比 V3 的差异
+
+| 维度 | V3 | V4 |
+|---|---|---|
+| 生成依据 | seed 切片 + CoT 理解 + 锚点约束 | seed 切片 + CWE 知识 + 机理分流 + 锚点约束 |
+| 漏洞类型处理 | 统一提示词，让 LLM 自己理解 | 显式推断机制家族，并给出机制专属 mutation plan |
+| 防语义漂移 | API / identifier anchor | API / identifier anchor + CWE definition + manifestation + mechanism constraints |
+| 变异多样性 | 要求非平凡变异 | 每个候选分配不同机理内变异策略 |
+| 主要目标 | 证明增强样本能带来收益 | 让增强样本按漏洞机理更稳定、更可解释 |
+
+一句话总结：
+
+```text
+V3 解决“生成样本不要漂、不要抄、要能训”；
+V4 解决“不同漏洞机理要按不同方式生成”。
+```
+
+### 4.3 原始 baseline 结果
 
 | 方法 | Precision | Recall | F1 | MCC |
 |---|---:|---:|---:|---:|
 | Baseline detector | `0.6875` | `0.8250` | `0.7500` | `0.4593` |
 
-### 4.2 V3 当前最强结果
+### 4.4 V3 当前最强结果
 
 | 方法 | Precision | Recall | F1 | MCC |
 |---|---:|---:|---:|---:|
@@ -153,7 +420,7 @@ refined_code 是最终教师目标
 - V3 证明少量高质量增强样本可以带来明显收益。
 - 相比 baseline，precision、F1、MCC 均有提升。
 
-### 4.3 V4 当前最稳结果
+### 4.5 V4 当前最稳结果
 
 | 方法 | Precision | Recall | F1 | MCC |
 |---|---:|---:|---:|---:|
@@ -660,4 +927,3 @@ CodeT5 生成多条候选
 - `~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_mid_quality_43990702_rerun5`
 - `~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_mid_quality_077_43990702_rerun6`
 - `~/VulnBooster_runs/43990702/artifacts/experiments/codet5_v4_pre_precision_052_q077_g4_43990702_rerun7`
-
